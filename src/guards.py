@@ -30,7 +30,6 @@ _CREDENTIAL_RULES = [
     ("password", r"\bpassword\b"),
     ("cvv", r"\bcvv\b|security code"),
     ("ssn", r"\bssn\b|social security number"),
-    ("full_account_number", r"full account number"),
     ("long_digit_sequence", r"\b\d{13,}\b"),
 ]
 
@@ -59,5 +58,11 @@ def scan_output(text: str, patterns: list[str] | None = None) -> list[str]:
             findings.append("full_card_number")
         elif re.search(r"card number", lowered) and not re.search(r"last (4|four)", lowered):
             findings.append("full_card_number")
+
+    if "full_account_number" in allowed:
+        if re.search(r"full account number", lowered):
+            findings.append("full_account_number")
+        elif re.search(r"account number", lowered) and not re.search(r"last (4|four)", lowered):
+            findings.append("full_account_number")
 
     return sorted(set(findings))

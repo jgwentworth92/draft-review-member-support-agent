@@ -25,3 +25,19 @@ def test_scan_output_flags_long_digit_sequence():
 
 def test_scan_output_clean_draft():
     assert scan_output("We can file a dispute. Please confirm the last 4 digits.") == []
+
+# --- account number guard (symmetric with card number) ---
+
+def test_scan_output_flags_bare_account_number_request():
+    # "account number" without a last-4 qualifier must flag full_account_number
+    assert "full_account_number" in scan_output("Please reply with your account number.")
+
+def test_scan_output_allows_account_number_with_last4():
+    # "last 4 digits of your account number" is safe — no flag expected
+    assert "full_account_number" not in scan_output(
+        "Please confirm the last 4 digits of your account number."
+    )
+
+def test_scan_output_flags_full_account_number_phrase():
+    # existing behaviour: explicit "full account number" must still flag
+    assert "full_account_number" in scan_output("Send your full account number.")
