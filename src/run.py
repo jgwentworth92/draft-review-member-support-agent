@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 from src.config import load_config
 from src.graph import build_app, initial_state
+from src.logging_config import configure_logging
 from src.models import build_model
 from src.schemas import RunInput
+
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -31,16 +35,19 @@ def main(argv=None) -> int:
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
 
+    configure_logging()
+
     final = run(args.member_message, args.case_notes, config_path=args.config)
 
-    print(f"STATUS: {final.get('status')}")
-    print(f"ROUNDS: {len(final.get('history', []))}")
-    print("DRAFT:")
-    print(final.get("draft") or "(no draft — escalated before drafting)")
-    if final.get("status") == "escalated":
-        print("\nESCALATION REASONS (last review):")
-        for fi in (final.get("feedback") or []):
-            print(f"  - {fi['item']}: {fi['reason']}")
+    status = final.get("status")
+    rounds = len(final.get("history", []))
+    logger.info("Status: %s (after %d round(s))", status, rounds)
+    logger.info("Draft:\n%s", final.get("draft") or "(no draft — escalated before drafting)")
+    if status == "escalated":
+        reasons = "; ".join(
+            f"{fi['item']}: {fi['reason']}" for fi in (final.get("feedback") or [])
+        )
+        logger.warning("Escalation reasons (last review): %s", reasons or "(none recorded)")
     return 0
 
 

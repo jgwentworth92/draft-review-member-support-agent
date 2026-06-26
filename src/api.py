@@ -14,13 +14,18 @@ key, e.g. ANTHROPIC_API_KEY).
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from src.logging_config import configure_logging
 from src.run import run
 from src.schemas import RunInput
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Draft-and-Review Member Support Agent",
@@ -72,8 +77,13 @@ def draft(request: RunInput, models=Depends(get_models)) -> DraftResponse:
             reviewer_model=reviewer_model,
         )
     except Exception as exc:  # config/model/runtime failure (e.g. missing API key)
+        logger.exception("Agent run failed")
         raise HTTPException(status_code=503, detail=f"Agent run failed: {exc}") from exc
 
+    # Log the outcome only — not the member message or draft body (may contain PII).
+    logger.info(
+        "/draft -> status=%s rounds=%d", final.get("status"), len(final.get("history", []))
+    )
     return DraftResponse(
         status=final["status"],
         draft=final.get("draft"),
