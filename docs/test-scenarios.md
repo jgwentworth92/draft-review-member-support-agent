@@ -109,4 +109,4 @@ These are deterministic and live in `tests/` — run `pytest --ignore=tests/test
   escalate. (`tests/test_loop.py`, `tests/test_functional.py`, `tests/test_guards.py`)
 - **3-round escalation** and **revise-then-pass** loop behavior. (`tests/test_loop.py`)
 - **Input injection → escalate before drafting.** (`tests/test_functional.py`)
-- **Empty input → 422 (API) / ValidationError (lib).** (`tests/test_api.py`, `tests/test_run.py`)
+- **Empty input → 422 (API) / ValidationError (lib).** (`tests/test_api.py`, `tests/test_service.py`)
