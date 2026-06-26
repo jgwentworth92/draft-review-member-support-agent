@@ -1,9 +1,9 @@
 """Logging configuration for the application entrypoints.
 
 Library modules (e.g. `src.graph`) only ever call `logging.getLogger(__name__)`
-and emit records — they never configure handlers. The entrypoints (`src.run` CLI
-and `src.api` FastAPI app) call `configure_logging()` once at startup so those
-records actually get emitted.
+and emit records — they never configure handlers. The entrypoint (`src.api`
+FastAPI app) calls `configure_logging()` once at startup so those records
+actually get emitted.
 """
 
 from __future__ import annotations
