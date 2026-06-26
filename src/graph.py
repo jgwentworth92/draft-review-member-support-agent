@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from langgraph.graph import END, START, StateGraph
 
 from src import guards
 from src.agents import build_drafter, build_reviewer
 from src.config import AppConfig
 from src.schemas import GraphState
+
+logger = logging.getLogger(__name__)
 
 
 def initial_state(member_message: str, case_notes: str) -> dict:
@@ -29,6 +33,7 @@ def build_app(config: AppConfig, drafter_model, reviewer_model):
             state["case_notes"], inj_patterns
         )
         if hits:
+            logger.warning("Input guard escalated before drafting; injection patterns: %s", hits)
             return {
                 "status": "escalated",
                 "verdict": "revise",
@@ -56,6 +61,14 @@ def build_app(config: AppConfig, drafter_model, reviewer_model):
             failed = failed + [
                 {"item": "credential_request", "reason": f"Draft requests prohibited info: {cred_hits}"}
             ]
+            logger.warning("Output guard forced revise; prohibited info requested: %s", cred_hits)
+
+        logger.info(
+            "Round %d review verdict=%s failed_items=%s",
+            state["round"],
+            verdict,
+            [fi["item"] for fi in failed],
+        )
 
         record = {
             "round": state["round"],
@@ -80,9 +93,13 @@ def build_app(config: AppConfig, drafter_model, reviewer_model):
         return {"round": state["round"] + 1}
 
     def approve_node(state: GraphState) -> dict:
+        logger.info("Approved -> pending_human_review after %d round(s)", state["round"])
         return {"status": "pending_human_review"}
 
     def escalate_node(state: GraphState) -> dict:
+        logger.info(
+            "Escalated -> human intervention after %d round(s)", len(state.get("history", []))
+        )
         return {"status": "escalated"}
 
     g = StateGraph(GraphState)
