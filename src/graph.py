@@ -3,13 +3,27 @@ from __future__ import annotations
 import logging
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import RetryPolicy
 
 from src import guards
 from src.agents import build_drafter, build_reviewer
-from src.config import AppConfig
+from src.config import AppConfig, RetryConfig
 from src.schemas import GraphState
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
+    """Map our RetryConfig to LangGraph's built-in RetryPolicy (or None)."""
+    if cfg is None:
+        return None
+    return RetryPolicy(
+        max_attempts=cfg.max_attempts,
+        backoff_factor=cfg.backoff_factor,
+        initial_interval=cfg.initial_interval,
+        max_interval=cfg.max_interval,
+        jitter=cfg.jitter,
+    )
 
 
 def initial_state(member_message: str, case_notes: str) -> dict:
@@ -21,10 +35,17 @@ def initial_state(member_message: str, case_notes: str) -> dict:
     }
 
 
-def build_app(config: AppConfig, drafter_model, reviewer_model):
-    drafter = build_drafter(drafter_model, config.drafter.system_prompt)
-    reviewer = build_reviewer(reviewer_model, config.reviewer.system_prompt)
+def build_app(
+    config: AppConfig,
+    drafter_model,
+    reviewer_model,
+    drafter_fallback=None,
+    reviewer_fallback=None,
+):
+    drafter = build_drafter(drafter_model, config.drafter.system_prompt, drafter_fallback)
+    reviewer = build_reviewer(reviewer_model, config.reviewer.system_prompt, reviewer_fallback)
     max_rounds = config.loop.max_rounds
+    retry_policy = _retry_policy(config.loop.retry)
     inj_patterns = config.guards.injection_patterns
     cred_patterns = config.guards.credential_patterns
 
@@ -104,8 +125,9 @@ def build_app(config: AppConfig, drafter_model, reviewer_model):
 
     g = StateGraph(GraphState)
     g.add_node("guard_input", guard_input_node)
-    g.add_node("drafter", drafter_node)
-    g.add_node("reviewer", reviewer_node)
+    # The model-calling nodes get LangGraph's built-in node-level retry (when configured).
+    g.add_node("drafter", drafter_node, retry_policy=retry_policy)
+    g.add_node("reviewer", reviewer_node, retry_policy=retry_policy)
     g.add_node("increment", increment_node)
     g.add_node("approve", approve_node)
     g.add_node("escalate", escalate_node)

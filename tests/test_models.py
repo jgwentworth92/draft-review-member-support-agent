@@ -12,5 +12,6 @@ def test_build_model_passes_config_to_init_chat_model():
         model="claude-haiku-4-5-20251001",
         model_provider="anthropic",
         temperature=0.3,
+        max_retries=2,
     )
     assert result == "MODEL"

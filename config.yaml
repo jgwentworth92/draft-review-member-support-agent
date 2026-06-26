@@ -41,6 +41,23 @@ reviewer:
 
 loop:
   max_rounds: 3
+  # Optional node-level retry (LangGraph RetryPolicy) for the drafter/reviewer
+  # nodes. Omit for no node retry. (Transient HTTP errors are already retried by
+  # the provider SDK via max_retries below.)
+  # retry:
+  #   max_attempts: 3
+  #   backoff_factor: 2.0
+  #   initial_interval: 0.5
+  #   max_interval: 128.0
+  #   jitter: true
+
+# Resilience knobs available on each agent (drafter/reviewer):
+#   max_retries: 2          # provider SDK retries w/ exponential backoff (default 2)
+#   timeout: 30             # per-request timeout in seconds (default: provider default)
+#   fallback:               # optional secondary model, tried if the primary fails
+#     provider: anthropic   #   (LangChain Runnable.with_fallbacks under the hood)
+#     model: claude-sonnet-4-6
+#     temperature: 0.0
 
 # Optional: override guard patterns here. Omit to use built-in defaults.
 # guards:
