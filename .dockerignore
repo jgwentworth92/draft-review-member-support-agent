@@ -1,0 +1,20 @@
+# Keep the build context (and image) small, and secrets/dev cruft out.
+.venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+.superpowers/
+docs/
+tests/
+conftest.py
+pytest.ini
+requirements-dev.txt
+
+# Never ship secrets or local env into the image.
+.env
+.env.*
+
+# Docs / scratch
+*.md
