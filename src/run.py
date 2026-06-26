@@ -24,7 +24,9 @@ def run(
     config = load_config(config_path)
     drafter_model = drafter_model or build_model(config.drafter)
     reviewer_model = reviewer_model or build_model(config.reviewer)
-    app = build_app(config, drafter_model, reviewer_model)
+    drafter_fallback = build_model(config.drafter.fallback) if config.drafter.fallback else None
+    reviewer_fallback = build_model(config.reviewer.fallback) if config.reviewer.fallback else None
+    app = build_app(config, drafter_model, reviewer_model, drafter_fallback, reviewer_fallback)
     return app.invoke(initial_state(inp.member_message, inp.case_notes))
 
 

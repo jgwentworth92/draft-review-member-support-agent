@@ -92,3 +92,21 @@ Tests need the dev dependencies (runtime deps plus pytest + httpx):
 Edit `config.yaml`. Each agent has `provider`, `model`, `temperature`, and `system_prompt`
 (the reviewer's checklist lives in its prompt). `loop.max_rounds` controls the round limit.
 Optional `guards.injection_patterns` / `guards.credential_patterns` override the defaults.
+
+## Resilience (retries, timeout, fallback)
+
+Built on the framework's own mechanisms — no custom retry code — all config-driven:
+
+- **Provider retries + backoff:** each agent's `max_retries` (default 2) and `timeout` are
+  passed to `init_chat_model`; the provider SDK retries transient errors (429 / 5xx /
+  overloaded / connection) with **exponential backoff + jitter**.
+- **Fallback model:** add a `fallback:` block to an agent (another `{provider, model, …}`)
+  and the primary is wrapped with LangChain's `Runnable.with_fallbacks(...)` — if the primary
+  fails, the fallback model/provider is tried. Off unless configured. Drafter and reviewer
+  can have different fallbacks.
+- **Node-level retry:** set `loop.retry` to attach LangGraph's `RetryPolicy` to the drafter
+  and reviewer nodes (`max_attempts`, `backoff_factor`, `initial_interval`, `max_interval`,
+  `jitter`). Off unless configured.
+
+On exhaustion, the error surfaces cleanly: the API returns `503`; the CLI exits non-zero.
+See `config.yaml` for commented examples.
