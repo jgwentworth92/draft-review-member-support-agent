@@ -10,11 +10,11 @@ Each scenario lists the inputs, the expected outcome, and what a compliant draft
 
 ## How to run a scenario
 
-CLI (logs the status + draft):
+Library (returns a typed RunResult):
 
-    python -m src.run \
-      --member-message "<member_message>" \
-      --case-notes "<case_notes>"
+    from src.service import DraftReviewService
+    result = DraftReviewService.from_config_path().run("<member_message>", "<case_notes>")
+    print(result.status, result.review.notes)
 
 HTTP API (`uvicorn src.api:app` must be running, with a provider key set):
 
@@ -109,4 +109,4 @@ These are deterministic and live in `tests/` — run `pytest --ignore=tests/test
   escalate. (`tests/test_loop.py`, `tests/test_functional.py`, `tests/test_guards.py`)
 - **3-round escalation** and **revise-then-pass** loop behavior. (`tests/test_loop.py`)
 - **Input injection → escalate before drafting.** (`tests/test_functional.py`)
-- **Empty input → 422 (API) / ValidationError (lib).** (`tests/test_api.py`, `tests/test_run.py`)
+- **Empty input → 422 (API) / ValidationError (lib).** (`tests/test_api.py`, `tests/test_service.py`)

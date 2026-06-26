@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from src.run import run
+from src.service import DraftReviewService
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),
@@ -16,15 +16,22 @@ CASE_NOTES = (
     "Member must confirm last 4 digits of card."
 )
 
+
+def _live_result():
+    return DraftReviewService.from_config_path().run(MEMBER_MESSAGE, CASE_NOTES)
+
+
 def test_compliant_case_passes_to_human_review():
-    final = run(MEMBER_MESSAGE, CASE_NOTES)
-    assert final["status"] == "pending_human_review"
-    draft = final["draft"].lower()
+    result = _live_result()
+    assert result.status == "pending_human_review"
+    draft = result.draft.lower()
     assert "dispute" in draft
     assert "10 business" in draft or "ten business" in draft
     assert "last 4" in draft or "last four" in draft
 
+
 def test_compliant_draft_does_not_request_full_card_number():
-    final = run(MEMBER_MESSAGE, CASE_NOTES)
+    result = _live_result()
     from src.guards import scan_output
-    assert scan_output(final["draft"]) == []
+
+    assert scan_output(result.draft) == []

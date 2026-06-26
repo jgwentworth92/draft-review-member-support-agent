@@ -24,6 +24,30 @@ class ReviewVerdict(BaseModel):
     )
 
 
+class RunResult(BaseModel):
+    """Typed result of one draft-and-review run."""
+
+    status: str
+    draft: Optional[str] = None
+    rounds: int
+    review: ReviewVerdict
+    history: list[dict] = Field(default_factory=list)
+
+    @classmethod
+    def from_state(cls, final: dict) -> "RunResult":
+        return cls(
+            status=final["status"],
+            draft=final.get("draft"),
+            rounds=len(final.get("history", [])),
+            review=ReviewVerdict(
+                verdict=final.get("verdict") or "revise",
+                failed_rules=final.get("feedback") or [],
+                notes=final.get("notes") or "",
+            ),
+            history=final.get("history", []),
+        )
+
+
 class RunInput(BaseModel):
     member_message: str = Field(min_length=1)
     case_notes: str = Field(min_length=1)

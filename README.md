@@ -19,11 +19,16 @@ is a config edit only — no code change. The Drafter and Reviewer can run diffe
     python -m pip install -r requirements.txt
     cp .env.example .env   # then fill in your provider key(s)
 
-## Run
+## Use as a library
 
-    python -m src.run \
-      --member-message "I see a \$50 charge I do not recognize and I'm really upset." \
-      --case-notes "Disputes can be filed. Provisional credit in 10 business days. Member must confirm last 4 digits of card."
+    from src.service import DraftReviewService
+
+    service = DraftReviewService.from_config_path()   # builds models + graph once
+    result = service.run(
+        member_message="I see a $50 charge I do not recognize and I'm really upset.",
+        case_notes="Disputes can be filed. Provisional credit in 10 business days. Confirm last 4 digits.",
+    )
+    print(result.status, result.review.verdict)        # RunResult (typed)
 
 ## Run the API
 
@@ -112,5 +117,5 @@ Built on the framework's own mechanisms — no custom retry code — all config-
   and reviewer nodes (`max_attempts`, `backoff_factor`, `initial_interval`, `max_interval`,
   `jitter`). Off unless configured.
 
-On exhaustion, the error surfaces cleanly: the API returns `503`; the CLI exits non-zero.
+On exhaustion, the error surfaces cleanly: the API returns `503`; the service raises an exception.
 See `config.yaml` for commented examples.
