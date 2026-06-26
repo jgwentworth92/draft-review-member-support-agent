@@ -4,7 +4,7 @@ These tests drive the PUBLIC entrypoint `src.run.run` with scripted stub models
 (no API key, no network) and assert the behaviors the build brief requires:
 the loop outcomes, the 3-round escalation limit, the distinct terminal states,
 and both deterministic safeguards. Each test maps to an acceptance criterion or
-a safeguard from docs/superpowers/specs.
+a safeguard from docs/specs.
 
 Unit tests (test_loop.py) exercise the compiled graph object directly; this file
 verifies the same guarantees through the runner the CLI uses, so a regression in
