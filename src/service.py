@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import logging
-
 from src.config import AppConfig, load_config
 from src.graph import build_app, initial_state
 from src.models import build_model
 from src.schemas import RunInput, RunResult
-
-logger = logging.getLogger(__name__)
 
 
 class DraftReviewService:

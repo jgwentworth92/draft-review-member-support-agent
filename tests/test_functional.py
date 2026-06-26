@@ -68,6 +68,8 @@ def test_three_revises_escalate_not_approve():
     assert result.status == "escalated"
     assert result.status != "pending_human_review"
     assert result.rounds == 3
+    assert result.review.verdict == "revise"
+    assert result.review.failed_rules
 
 
 # --- Output safeguard backstop --------------------------------------------
@@ -125,6 +127,7 @@ def test_prompt_injection_escalates_before_drafting():
     assert result.status == "escalated"
     assert not result.draft
     assert result.history == []
+    assert result.review.failed_rules[0].rule == "prompt_injection"
 
 
 # --- Input validation ------------------------------------------------------
