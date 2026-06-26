@@ -54,8 +54,27 @@ Endpoints: `POST /draft` (run the loop), `GET /health` (liveness). Interactive d
 draft is returned as `pending_human_review` — the caller still puts it in front of a human;
 the API never sends.
 
+## Run with Docker
+
+The service is containerized (slim image, non-root user, `/health` healthcheck).
+
+    docker build -t draft-review-agent:latest .
+    docker run --rm -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... draft-review-agent:latest
+
+Or with Compose (reads your key from `.env`, which is git/docker-ignored):
+
+    cp .env.example .env   # fill in ANTHROPIC_API_KEY
+    docker compose up --build
+
+The API is then at `http://127.0.0.1:8000` (docs at `/docs`). The key is supplied at
+runtime only — it is never copied into the image. Without a key the app still boots and
+`/health` is green; `/draft` returns `503` until a key is provided.
+
 ## Test
 
+Tests need the dev dependencies (runtime deps plus pytest + httpx):
+
+    python -m pip install -r requirements-dev.txt
     python -m pytest -v --ignore=tests/test_acceptance.py   # deterministic suite (no API key)
     ANTHROPIC_API_KEY=... python -m pytest tests/test_acceptance.py -v   # live acceptance test
 
