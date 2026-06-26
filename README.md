@@ -25,6 +25,35 @@ is a config edit only — no code change. The Drafter and Reviewer can run diffe
       --member-message "I see a \$50 charge I do not recognize and I'm really upset." \
       --case-notes "Disputes can be filed. Provisional credit in 10 business days. Member must confirm last 4 digits of card."
 
+## Run the API
+
+A thin FastAPI layer wraps the same loop. Start it (needs a provider key, e.g.
+`ANTHROPIC_API_KEY`, since `/draft` calls the live model):
+
+    uvicorn src.api:app --reload
+
+Then POST a member message + case notes:
+
+    curl -s http://127.0.0.1:8000/draft \
+      -H "Content-Type: application/json" \
+      -d '{"member_message": "I see a $50 charge I do not recognize and I am upset.",
+           "case_notes": "Disputes can be filed. Provisional credit in 10 business days. Confirm last 4 digits."}'
+
+Response:
+
+    {
+      "status": "pending_human_review",   // or "escalated"
+      "draft": "…email body…",            // null if escalated before drafting
+      "rounds": 1,
+      "feedback": null,                     // failed checklist items, if any
+      "history": [ { "round": 1, "draft": "…", "verdict": "pass", "failed_items": [] } ]
+    }
+
+Endpoints: `POST /draft` (run the loop), `GET /health` (liveness). Interactive docs at
+`/docs`. Empty/missing fields return `422`; an agent/model failure returns `503`. A passing
+draft is returned as `pending_human_review` — the caller still puts it in front of a human;
+the API never sends.
+
 ## Test
 
     python -m pytest -v --ignore=tests/test_acceptance.py   # deterministic suite (no API key)
