@@ -1,8 +1,8 @@
 """API-layer tests for the thin FastAPI wrapper.
 
-Uses Starlette's TestClient and overrides the `get_models` dependency to inject
-deterministic stub models, so these run with no API key and no network — the same
-discipline as the rest of the suite.
+Uses Starlette's TestClient and overrides the `get_service` dependency to inject
+a service built with deterministic stub models, so these run with no API key and
+no network — the same discipline as the rest of the suite.
 """
 
 from __future__ import annotations
@@ -10,16 +10,20 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api import app, get_models
+from src.api import app, get_service
+from src.config import load_config
 from src.schemas import FailedRule, ReviewVerdict
+from src.service import DraftReviewService
 from tests.stub_model import ScriptedModel
 
 client = TestClient(app)
 
 
-def _override_models(drafter, reviewer):
+def _override_service(drafter, reviewer):
+    svc = DraftReviewService(load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer)
+
     def _get():
-        return (drafter, reviewer)
+        return svc
 
     return _get
 
@@ -37,7 +41,7 @@ def test_health_ok():
 
 
 def test_draft_passes_to_human_review():
-    app.dependency_overrides[get_models] = _override_models(
+    app.dependency_overrides[get_service] = _override_service(
         ScriptedModel(draft_responses=["We can file a dispute. Please confirm the last 4 digits."]),
         ScriptedModel(review_responses=[ReviewVerdict(verdict="pass")]),
     )
@@ -62,7 +66,7 @@ def test_draft_passes_to_human_review():
 
 
 def test_draft_escalates_on_full_card_number():
-    app.dependency_overrides[get_models] = _override_models(
+    app.dependency_overrides[get_service] = _override_service(
         ScriptedModel(draft_responses=["Please reply with your full card number."] * 3),
         ScriptedModel(review_responses=[ReviewVerdict(verdict="pass")] * 3),
     )
@@ -77,7 +81,7 @@ def test_draft_escalates_on_full_card_number():
 
 def test_draft_escalates_after_three_revises():
     revise = ReviewVerdict(verdict="revise", failed_rules=[FailedRule(rule="tone", reason="curt")])
-    app.dependency_overrides[get_models] = _override_models(
+    app.dependency_overrides[get_service] = _override_service(
         ScriptedModel(draft_responses=["d1", "d2", "d3"]),
         ScriptedModel(review_responses=[revise, revise, revise]),
     )
