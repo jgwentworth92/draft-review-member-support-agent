@@ -5,18 +5,22 @@ from typing import Literal, Optional, TypedDict
 from pydantic import BaseModel, Field
 
 
-class FailedItem(BaseModel):
-    item: str = Field(description="The checklist item that failed.")
-    reason: str = Field(description="Specific reason this checklist item failed.")
+class FailedRule(BaseModel):
+    rule: str = Field(description="The checklist rule that failed.")
+    reason: str = Field(description="Specific reason this checklist rule failed.")
 
 
 class ReviewVerdict(BaseModel):
     verdict: Literal["pass", "revise"] = Field(
-        description="'pass' only if every checklist item passes, otherwise 'revise'."
+        description="'pass' only if every checklist rule passes, otherwise 'revise'."
     )
-    failed_items: list[FailedItem] = Field(
+    failed_rules: list[FailedRule] = Field(
         default_factory=list,
-        description="One entry per failed checklist item. Empty when verdict is 'pass'.",
+        description="One entry per failed checklist rule. Empty when verdict is 'pass'.",
+    )
+    notes: str = Field(
+        default="",
+        description="Brief overall assessment of the draft (1-2 sentences).",
     )
 
 
@@ -29,7 +33,8 @@ class RoundRecord(TypedDict):
     round: int
     draft: str
     verdict: str
-    failed_items: list[dict]
+    failed_rules: list[dict]
+    notes: str
 
 
 class GraphState(TypedDict, total=False):
@@ -37,6 +42,7 @@ class GraphState(TypedDict, total=False):
     case_notes: str
     draft: str
     feedback: Optional[list[dict]]
+    notes: Optional[str]
     round: int
     verdict: Optional[str]
     status: Optional[str]

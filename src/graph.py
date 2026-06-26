@@ -59,8 +59,9 @@ def build_app(
                 "status": "escalated",
                 "verdict": "revise",
                 "feedback": [
-                    {"item": "prompt_injection", "reason": f"Injection patterns detected: {hits}"}
+                    {"rule": "prompt_injection", "reason": f"Injection patterns detected: {hits}"}
                 ],
+                "notes": "Escalated by the input guard before drafting.",
             }
         return {}
 
@@ -73,33 +74,36 @@ def build_app(
 
     def reviewer_node(state: GraphState) -> dict:
         verdict_obj = reviewer(state["draft"], state["case_notes"])
-        failed = [fi.model_dump() for fi in verdict_obj.failed_items]
+        failed = [fr.model_dump() for fr in verdict_obj.failed_rules]
         verdict = "pass" if (verdict_obj.verdict == "pass" and not failed) else "revise"
+        notes = verdict_obj.notes
 
         cred_hits = guards.scan_output(state["draft"], cred_patterns)
         if cred_hits:
             verdict = "revise"
             failed = failed + [
-                {"item": "credential_request", "reason": f"Draft requests prohibited info: {cred_hits}"}
+                {"rule": "credential_request", "reason": f"Draft requests prohibited info: {cred_hits}"}
             ]
             logger.warning("Output guard forced revise; prohibited info requested: %s", cred_hits)
 
         logger.info(
-            "Round %d review verdict=%s failed_items=%s",
+            "Round %d review verdict=%s failed_rules=%s",
             state["round"],
             verdict,
-            [fi["item"] for fi in failed],
+            [fr["rule"] for fr in failed],
         )
 
         record = {
             "round": state["round"],
             "draft": state["draft"],
             "verdict": verdict,
-            "failed_items": failed,
+            "failed_rules": failed,
+            "notes": notes,
         }
         return {
             "verdict": verdict,
             "feedback": failed,
+            "notes": notes,
             "history": state.get("history", []) + [record],
         }
 

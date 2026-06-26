@@ -17,7 +17,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.run import run
-from src.schemas import FailedItem, ReviewVerdict
+from src.schemas import FailedRule, ReviewVerdict
 from tests.stub_model import ScriptedModel
 
 
@@ -25,8 +25,8 @@ def _pass() -> ReviewVerdict:
     return ReviewVerdict(verdict="pass")
 
 
-def _revise(item: str = "tone", reason: str = "too curt") -> ReviewVerdict:
-    return ReviewVerdict(verdict="revise", failed_items=[FailedItem(item=item, reason=reason)])
+def _revise(rule: str = "tone", reason: str = "too curt") -> ReviewVerdict:
+    return ReviewVerdict(verdict="revise", failed_rules=[FailedRule(rule=rule, reason=reason)])
 
 
 # --- Loop outcomes ---------------------------------------------------------
@@ -86,7 +86,7 @@ def test_full_card_number_request_is_blocked_even_if_model_passes():
     )
     assert final["status"] == "escalated"
     assert any(
-        fi["item"] == "credential_request" for fi in final["history"][0]["failed_items"]
+        fr["rule"] == "credential_request" for fr in final["history"][0]["failed_rules"]
     )
 
 
@@ -101,7 +101,7 @@ def test_bare_account_number_request_is_blocked():
     )
     assert final["status"] == "escalated"
     assert any(
-        fi["item"] == "credential_request" for fi in final["history"][0]["failed_items"]
+        fr["rule"] == "credential_request" for fr in final["history"][0]["failed_rules"]
     )
 
 
@@ -115,7 +115,7 @@ def test_last4_request_is_allowed_through():
     )
     assert final["status"] == "pending_human_review"
     assert all(
-        fi["item"] != "credential_request" for fi in final["history"][0]["failed_items"]
+        fr["rule"] != "credential_request" for fr in final["history"][0]["failed_rules"]
     )
 
 

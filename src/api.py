@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from src.logging_config import configure_logging
 from src.run import run
-from src.schemas import RunInput
+from src.schemas import ReviewVerdict, RunInput
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -42,12 +42,12 @@ class DraftResponse(BaseModel):
         default=None, description="Final email body, or null if escalated before drafting."
     )
     rounds: int = Field(description="Number of review rounds executed.")
-    feedback: Optional[list[dict]] = Field(
-        default=None, description="Failed checklist items from the latest review, if any."
+    review: ReviewVerdict = Field(
+        description="Structured verdict from the latest review: {verdict, failed_rules, notes}."
     )
     history: list[dict] = Field(
         default_factory=list,
-        description="Per-round records: {round, draft, verdict, failed_items}.",
+        description="Per-round records: {round, draft, verdict, failed_rules, notes}.",
     )
 
 
@@ -84,10 +84,15 @@ def draft(request: RunInput, models=Depends(get_models)) -> DraftResponse:
     logger.info(
         "/draft -> status=%s rounds=%d", final.get("status"), len(final.get("history", []))
     )
+    review = ReviewVerdict(
+        verdict=final.get("verdict") or "revise",
+        failed_rules=final.get("feedback") or [],
+        notes=final.get("notes") or "",
+    )
     return DraftResponse(
         status=final["status"],
         draft=final.get("draft"),
         rounds=len(final.get("history", [])),
-        feedback=final.get("feedback"),
+        review=review,
         history=final.get("history", []),
     )
