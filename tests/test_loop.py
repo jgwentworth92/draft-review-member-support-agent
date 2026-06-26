@@ -1,5 +1,5 @@
 from src.config import load_config
-from src.schemas import ReviewVerdict, FailedItem
+from src.schemas import ReviewVerdict, FailedRule
 from src.graph import build_app, initial_state
 from tests.stub_model import ScriptedModel
 
@@ -18,7 +18,7 @@ def test_pass_on_round_one():
 def test_escalate_after_three_revises():
     drafter = ScriptedModel(draft_responses=["d1", "d2", "d3"])
     revise = lambda: ReviewVerdict(verdict="revise",
-                                   failed_items=[FailedItem(item="tone", reason="curt")])
+                                   failed_rules=[FailedRule(rule="tone", reason="curt")])
     reviewer = ScriptedModel(review_responses=[revise(), revise(), revise()])
     app = build_app(_cfg(), drafter, reviewer)
     final = app.invoke(initial_state("msg", "notes"))
@@ -29,7 +29,7 @@ def test_revise_then_pass():
     drafter = ScriptedModel(draft_responses=["bad draft", "good draft. last 4 digits."])
     reviewer = ScriptedModel(review_responses=[
         ReviewVerdict(verdict="revise",
-                      failed_items=[FailedItem(item="next_step", reason="no next step")]),
+                      failed_rules=[FailedRule(rule="next_step", reason="no next step")]),
         ReviewVerdict(verdict="pass"),
     ])
     app = build_app(_cfg(), drafter, reviewer)
@@ -53,5 +53,5 @@ def test_output_guard_overrides_llm_pass():
     app = build_app(_cfg(), drafter, reviewer)
     final = app.invoke(initial_state("msg", "notes"))
     assert final["status"] == "escalated"
-    assert any(fi["item"] == "credential_request"
-               for fi in final["history"][0]["failed_items"])
+    assert any(fr["rule"] == "credential_request"
+               for fr in final["history"][0]["failed_rules"])

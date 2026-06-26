@@ -1,17 +1,20 @@
 import pytest
 from pydantic import ValidationError
-from src.schemas import FailedItem, ReviewVerdict, RunInput
+from src.schemas import FailedRule, ReviewVerdict, RunInput
 
-def test_review_verdict_defaults_empty_failed_items():
+def test_review_verdict_defaults_empty_failed_rules():
     v = ReviewVerdict(verdict="pass")
-    assert v.failed_items == []
+    assert v.failed_rules == []
+    assert v.notes == ""
 
 def test_review_verdict_with_failures():
     v = ReviewVerdict(
         verdict="revise",
-        failed_items=[FailedItem(item="timeline", reason="promises 5 days not in notes")],
+        failed_rules=[FailedRule(rule="timeline", reason="promises 5 days not in notes")],
+        notes="The timeline is not supported by the case notes.",
     )
-    assert v.failed_items[0].item == "timeline"
+    assert v.failed_rules[0].rule == "timeline"
+    assert v.notes
 
 def test_review_verdict_rejects_unknown_verdict():
     with pytest.raises(ValidationError):

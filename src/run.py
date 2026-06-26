@@ -47,9 +47,11 @@ def main(argv=None) -> int:
     logger.info("Draft:\n%s", final.get("draft") or "(no draft — escalated before drafting)")
     if status == "escalated":
         reasons = "; ".join(
-            f"{fi['item']}: {fi['reason']}" for fi in (final.get("feedback") or [])
+            f"{fr['rule']}: {fr['reason']}" for fr in (final.get("feedback") or [])
         )
         logger.warning("Escalation reasons (last review): %s", reasons or "(none recorded)")
+    if final.get("notes"):
+        logger.info("Reviewer notes: %s", final["notes"])
     return 0
 
 

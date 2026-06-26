@@ -21,7 +21,7 @@ def format_drafter_human(
         "\n<case_notes>\n" + case_notes + "\n</case_notes>",
     ]
     if feedback:
-        lines = "\n".join(f"- {f['item']}: {f['reason']}" for f in feedback)
+        lines = "\n".join(f"- {f['rule']}: {f['reason']}" for f in feedback)
         parts.append(
             "\nThe previous draft was rejected. You MUST address every point below:\n"
             + lines

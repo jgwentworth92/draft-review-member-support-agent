@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api import app, get_models
-from src.schemas import FailedItem, ReviewVerdict
+from src.schemas import FailedRule, ReviewVerdict
 from tests.stub_model import ScriptedModel
 
 client = TestClient(app)
@@ -55,6 +55,10 @@ def test_draft_passes_to_human_review():
     assert body["rounds"] == 1
     assert len(body["history"]) == 1
     assert body["history"][0]["verdict"] == "pass"
+    # structured review object: {verdict, failed_rules, notes}
+    assert body["review"]["verdict"] == "pass"
+    assert body["review"]["failed_rules"] == []
+    assert "notes" in body["review"]
 
 
 def test_draft_escalates_on_full_card_number():
@@ -67,12 +71,12 @@ def test_draft_escalates_on_full_card_number():
     body = resp.json()
     assert body["status"] == "escalated"
     assert any(
-        fi["item"] == "credential_request" for fi in body["history"][0]["failed_items"]
+        fr["rule"] == "credential_request" for fr in body["history"][0]["failed_rules"]
     )
 
 
 def test_draft_escalates_after_three_revises():
-    revise = ReviewVerdict(verdict="revise", failed_items=[FailedItem(item="tone", reason="curt")])
+    revise = ReviewVerdict(verdict="revise", failed_rules=[FailedRule(rule="tone", reason="curt")])
     app.dependency_overrides[get_models] = _override_models(
         ScriptedModel(draft_responses=["d1", "d2", "d3"]),
         ScriptedModel(review_responses=[revise, revise, revise]),

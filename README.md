@@ -45,8 +45,12 @@ Response:
       "status": "pending_human_review",   // or "escalated"
       "draft": "…email body…",            // null if escalated before drafting
       "rounds": 1,
-      "feedback": null,                     // failed checklist items, if any
-      "history": [ { "round": 1, "draft": "…", "verdict": "pass", "failed_items": [] } ]
+      "review": {                           // structured verdict from the latest review
+        "verdict": "pass",                  //   "pass" | "revise"
+        "failed_rules": [],                 //   [{ "rule": …, "reason": … }]
+        "notes": "…overall assessment…"
+      },
+      "history": [ { "round": 1, "draft": "…", "verdict": "pass", "failed_rules": [], "notes": "…" } ]
     }
 
 Endpoints: `POST /draft` (run the loop), `GET /health` (liveness). Interactive docs at
