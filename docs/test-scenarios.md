@@ -10,11 +10,11 @@ Each scenario lists the inputs, the expected outcome, and what a compliant draft
 
 ## How to run a scenario
 
-CLI (logs the status + draft):
+Library (returns a typed RunResult):
 
-    python -m src.run \
-      --member-message "<member_message>" \
-      --case-notes "<case_notes>"
+    from src.service import DraftReviewService
+    result = DraftReviewService.from_config_path().run("<member_message>", "<case_notes>")
+    print(result.status, result.review.notes)
 
 HTTP API (`uvicorn src.api:app` must be running, with a provider key set):
 
