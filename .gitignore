@@ -14,5 +14,8 @@ venv/
 .env
 .env.*
 
+# Azure Functions local settings (holds the local ANTHROPIC_API_KEY — never commit)
+local.settings.json
+
 # Workflow scratch (SDD ledger, briefs, diffs) — not part of the project
 .superpowers/

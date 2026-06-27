@@ -1,0 +1,10 @@
+.git*
+.venv/
+venv/
+.vscode/
+__pycache__/
+.pytest_cache/
+tests/
+local.settings.json
+requirements-dev.txt
+.superpowers/

@@ -1,0 +1,74 @@
+name: Deploy to Azure Functions
+
+# Deploys the draft-and-review Function App on every push to master.
+#
+# Auth: OIDC (federated credentials) via azure/login — no stored secret.
+# Flex Consumption does NOT support publish profiles, so we log in with a
+# federated identity and let the Functions action deploy through that session.
+#
+# Prereqs (one-time, run scripts/setup-github-oidc.ps1):
+#   1. Function App exists (Flex Consumption, Python 3.11).
+#   2. ANTHROPIC_API_KEY is set as an Application Setting on the Function App.
+#   3. An Azure AD app + service principal with Contributor on the resource group,
+#      a federated credential trusting this repo's branch, and these GitHub
+#      secrets set: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+permissions:
+  id-token: write   # required for azure/login OIDC token exchange
+  contents: read
+
+env:
+  AZURE_FUNCTIONAPP_NAME: draft-review-func-95005
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: .
+          remote-build: true
