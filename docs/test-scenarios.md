@@ -12,7 +12,7 @@ Each scenario lists the inputs, the expected outcome, and what a compliant draft
 
 Library (returns a typed RunResult):
 
-    from src.service import DraftReviewService
+    from src.scenarios.quality.service import DraftReviewService
     result = DraftReviewService.from_config_path().run("<member_message>", "<case_notes>")
     print(result.status, result.review.notes)
 

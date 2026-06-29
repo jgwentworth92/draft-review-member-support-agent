@@ -21,7 +21,7 @@ is a config edit only — no code change. The Drafter and Reviewer can run diffe
 
 ## Use as a library
 
-    from src.service import DraftReviewService
+    from src.scenarios.quality.service import DraftReviewService
 
     service = DraftReviewService.from_config_path()   # builds models + graph once
     result = service.run(
