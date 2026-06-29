@@ -15,13 +15,25 @@ def sequential_pipeline(state_type, *, first, second):
 def critique_loop(
     state_type, *, generator, reviewer, route_after_review,
     input_guard=None, approved_status="approved", escalated_status="escalated", retry_policy=None,
+    on_approve=None, on_escalate=None,
 ):
     g = StateGraph(state_type)
     g.add_node("generator", generator, retry_policy=retry_policy)
     g.add_node("reviewer", reviewer, retry_policy=retry_policy)
     g.add_node("increment", lambda s: {"round": s["round"] + 1})
-    g.add_node("approve", lambda s: {"status": approved_status})
-    g.add_node("escalate", lambda s: {"status": escalated_status})
+
+    def _approve(s):
+        if on_approve is not None:
+            on_approve(s)
+        return {"status": approved_status}
+
+    def _escalate(s):
+        if on_escalate is not None:
+            on_escalate(s)
+        return {"status": escalated_status}
+
+    g.add_node("approve", _approve)
+    g.add_node("escalate", _escalate)
 
     if input_guard is not None:
         g.add_node("guard", input_guard)

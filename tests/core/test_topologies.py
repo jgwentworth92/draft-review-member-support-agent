@@ -57,6 +57,37 @@ def test_input_guard_short_circuits():
     assert out["status"] == "blocked" and out.get("round") == 1  # generator never ran
 
 
+def test_critique_loop_fires_terminal_hooks():
+    approved, escalated = [], []
+
+    g_ok = critique_loop(
+        LoopState,
+        generator=lambda s: {},
+        reviewer=lambda s: {"verdict": "pass"},
+        route_after_review=lambda s: "approve",
+        approved_status="done",
+        on_approve=lambda s: approved.append(s["round"]),
+    )
+    g_ok.invoke({"round": 1})
+    assert approved == [1]  # on_approve ran exactly once with the terminal state
+
+    def route(s):
+        if s["verdict"] == "pass":
+            return "approve"
+        return "escalate" if s["round"] >= 2 else "revise"
+
+    g_esc = critique_loop(
+        LoopState,
+        generator=lambda s: {},
+        reviewer=lambda s: {"verdict": "revise"},
+        route_after_review=route,
+        escalated_status="esc",
+        on_escalate=lambda s: escalated.append(s["round"]),
+    )
+    g_esc.invoke({"round": 1})
+    assert escalated == [2]  # on_escalate ran exactly once at the terminal round
+
+
 class PlanState(TypedDict, total=False):
     tasks: list
     artifacts: list
