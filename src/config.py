@@ -6,7 +6,7 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel, Field
 
-from src import guards
+from src.core import guards
 
 
 class ModelConfig(BaseModel):

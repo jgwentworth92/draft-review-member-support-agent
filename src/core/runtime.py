@@ -1,17 +1,22 @@
-"""Logging configuration for the application entrypoints.
-
-Library modules (e.g. `src.graph`) only ever call `logging.getLogger(__name__)`
-and emit records — they never configure handlers. The entrypoint (`src.api`
-FastAPI app) calls `configure_logging()` once at startup so those records
-actually get emitted.
-"""
-
 from __future__ import annotations
-
 import logging
 import os
+from langgraph.types import RetryPolicy
+from src.config import RetryConfig
 
 _DEFAULT_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+def retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
+    if cfg is None:
+        return None
+    return RetryPolicy(
+        max_attempts=cfg.max_attempts,
+        backoff_factor=cfg.backoff_factor,
+        initial_interval=cfg.initial_interval,
+        max_interval=cfg.max_interval,
+        jitter=cfg.jitter,
+    )
 
 
 def configure_logging(level: str | int | None = None) -> None:

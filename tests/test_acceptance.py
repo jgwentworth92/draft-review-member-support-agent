@@ -32,6 +32,6 @@ def test_compliant_case_passes_to_human_review():
 
 def test_compliant_draft_does_not_request_full_card_number():
     result = _live_result()
-    from src.guards import scan_output
+    from src.core.guards import scan_output
 
     assert scan_output(result.draft) == []

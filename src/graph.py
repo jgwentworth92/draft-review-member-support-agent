@@ -3,27 +3,14 @@ from __future__ import annotations
 import logging
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy
 
-from src import guards
+from src.core import guards
+from src.core.runtime import retry_policy as _retry_policy
 from src.agents import build_drafter, build_reviewer
-from src.config import AppConfig, RetryConfig
+from src.config import AppConfig
 from src.schemas import GraphState
 
 logger = logging.getLogger(__name__)
-
-
-def _retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
-    """Map our RetryConfig to LangGraph's built-in RetryPolicy (or None)."""
-    if cfg is None:
-        return None
-    return RetryPolicy(
-        max_attempts=cfg.max_attempts,
-        backoff_factor=cfg.backoff_factor,
-        initial_interval=cfg.initial_interval,
-        max_interval=cfg.max_interval,
-        jitter=cfg.jitter,
-    )
 
 
 def initial_state(member_message: str, case_notes: str) -> dict:

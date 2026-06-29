@@ -19,7 +19,7 @@ import logging
 import azure.functions as func
 from pydantic import ValidationError
 
-from src.logging_config import configure_logging
+from src.core.runtime import configure_logging
 from src.schemas import RunInput
 from src.service import DraftReviewService
 

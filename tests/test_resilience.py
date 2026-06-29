@@ -19,7 +19,7 @@ from langchain_core.runnables import RunnableLambda
 from src.config import ModelConfig, RetryConfig, load_config
 from src.agents import build_drafter, build_reviewer
 from src.graph import build_app, initial_state
-from src.models import build_model
+from src.core.models import build_model
 from src.schemas import ReviewVerdict
 from tests.stub_model import ScriptedModel
 
@@ -29,7 +29,7 @@ from tests.stub_model import ScriptedModel
 
 def test_build_model_passes_max_retries_and_timeout_when_set():
     cfg = ModelConfig(provider="anthropic", model="m", temperature=0.0, max_retries=5, timeout=30.0)
-    with patch("src.models.init_chat_model") as mk:
+    with patch("src.core.models.init_chat_model") as mk:
         build_model(cfg)
     mk.assert_called_once_with(
         model="m", model_provider="anthropic", temperature=0.0, max_retries=5, timeout=30.0
@@ -38,7 +38,7 @@ def test_build_model_passes_max_retries_and_timeout_when_set():
 
 def test_build_model_omits_timeout_when_none():
     cfg = ModelConfig(provider="anthropic", model="m")
-    with patch("src.models.init_chat_model") as mk:
+    with patch("src.core.models.init_chat_model") as mk:
         build_model(cfg)
     _, kwargs = mk.call_args
     assert "timeout" not in kwargs
