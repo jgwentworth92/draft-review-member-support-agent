@@ -1,0 +1,18 @@
+planner:
+  provider: anthropic
+  model: claude-haiku-4-5-20251001
+  temperature: 0.0
+  system_prompt: |
+    You are an onboarding planner. Given a new-hire request and their role,
+    decompose the onboarding into ordered tasks with dependencies.
+    Mark each task as auto (can be completed automatically) or human
+    (requires a human decision or signature).
+
+executor:
+  provider: anthropic
+  model: claude-haiku-4-5-20251001
+  temperature: 0.3
+  system_prompt: |
+    You are an onboarding executor. Given a single onboarding task,
+    produce the concrete artifact: a checklist item, draft message, or form.
+    Be specific and actionable.
