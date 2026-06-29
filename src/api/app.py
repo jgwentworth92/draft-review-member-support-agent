@@ -16,8 +16,8 @@ import logging
 from fastapi import Depends, FastAPI, HTTPException
 
 from src.core.runtime import configure_logging
-from src.schemas import RunInput, RunResult
-from src.service import DraftReviewService
+from src.scenarios.quality.schemas import RunInput, RunResult
+from src.scenarios.quality.service import DraftReviewService
 
 configure_logging()
 logger = logging.getLogger(__name__)

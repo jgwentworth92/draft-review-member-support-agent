@@ -16,11 +16,12 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-from src.config import ModelConfig, RetryConfig, load_config
-from src.agents import build_drafter, build_reviewer
-from src.graph import build_app, initial_state
+from src.core.config import ModelConfig, RetryConfig
+from src.scenarios.quality.config import load_config
+from src.scenarios.quality.agents import build_drafter, build_reviewer
+from src.scenarios.quality.graph import build_app, initial_state
 from src.core.models import build_model
-from src.schemas import ReviewVerdict
+from src.scenarios.quality.schemas import ReviewVerdict
 from tests.stub_model import ScriptedModel
 
 
@@ -99,7 +100,7 @@ class _FailOnceReviewer:
 
 
 def test_node_retry_recovers_from_transient_failure():
-    cfg = load_config("config.yaml")
+    cfg = load_config("src/scenarios/quality/config.yaml")
     # Enable LangGraph node retry with near-zero backoff so the test is fast.
     cfg.loop.retry = RetryConfig(max_attempts=2, initial_interval=0.01, max_interval=0.02)
 
@@ -118,5 +119,5 @@ def test_node_retry_recovers_from_transient_failure():
 
 def test_no_retry_policy_by_default():
     # Default config has no loop.retry; a single transient failure is NOT retried.
-    cfg = load_config("config.yaml")
+    cfg = load_config("src/scenarios/quality/config.yaml")
     assert cfg.loop.retry is None

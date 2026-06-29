@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from src.config import AppConfig, load_config
-from src.graph import build_app, initial_state
 from src.core.models import build_model
-from src.schemas import RunInput, RunResult
+from src.core.service import PipelineService
+from src.scenarios.quality.config import AppConfig, load_config
+from src.scenarios.quality.graph import build_app, initial_state
+from src.scenarios.quality.schemas import RunInput, RunResult
 
 
-class DraftReviewService:
+class QualityService(PipelineService):
     """Composition root: builds the model pipeline + compiled graph ONCE, then
     runs many inputs through it. Construct once (e.g. at app startup) and reuse.
 
@@ -23,15 +24,21 @@ class DraftReviewService:
         reviewer_fallback = (
             build_model(config.reviewer.fallback) if config.reviewer.fallback else None
         )
-        self._app = build_app(
+        graph = build_app(
             config, drafter_model, reviewer_model, drafter_fallback, reviewer_fallback
         )
+        super().__init__(graph)
 
     @classmethod
-    def from_config_path(cls, config_path: str = "config.yaml") -> "DraftReviewService":
-        return cls(load_config(config_path))
+    def from_config_path(
+        cls, path: str = "src/scenarios/quality/config.yaml"
+    ) -> "QualityService":
+        return cls(load_config(path))
 
     def run(self, member_message: str, case_notes: str) -> RunResult:
         inp = RunInput(member_message=member_message, case_notes=case_notes)
-        final = self._app.invoke(initial_state(inp.member_message, inp.case_notes))
+        final = self.invoke(initial_state(inp.member_message, inp.case_notes))
         return RunResult.from_state(final)
+
+
+DraftReviewService = QualityService

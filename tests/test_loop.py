@@ -1,10 +1,10 @@
-from src.config import load_config
-from src.schemas import ReviewVerdict, FailedRule
-from src.graph import build_app, initial_state
+from src.scenarios.quality.config import load_config
+from src.scenarios.quality.schemas import ReviewVerdict, FailedRule
+from src.scenarios.quality.graph import build_app, initial_state
 from tests.stub_model import ScriptedModel
 
 def _cfg():
-    return load_config("config.yaml")
+    return load_config("src/scenarios/quality/config.yaml")
 
 def test_pass_on_round_one():
     drafter = ScriptedModel(draft_responses=["Empathetic compliant draft. Last 4 digits please."])

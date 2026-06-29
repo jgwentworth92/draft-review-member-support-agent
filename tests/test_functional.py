@@ -11,14 +11,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from src.config import load_config
-from src.schemas import FailedRule, ReviewVerdict
-from src.service import DraftReviewService
+from src.scenarios.quality.config import load_config
+from src.scenarios.quality.schemas import FailedRule, ReviewVerdict
+from src.scenarios.quality.service import DraftReviewService
 from tests.stub_model import ScriptedModel
 
 
 def _run(member_message, case_notes, drafter, reviewer):
-    svc = DraftReviewService(load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer)
+    svc = DraftReviewService(load_config("src/scenarios/quality/config.yaml"), drafter_model=drafter, reviewer_model=reviewer)
     return svc.run(member_message, case_notes)
 
 

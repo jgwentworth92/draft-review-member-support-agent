@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from src.config import load_config
-from src.graph import build_app, initial_state
-from src.schemas import ReviewVerdict
+from src.scenarios.quality.config import load_config
+from src.scenarios.quality.graph import build_app, initial_state
+from src.scenarios.quality.schemas import ReviewVerdict
 from tests.stub_model import ScriptedModel
 
 
 def _cfg():
-    return load_config("config.yaml")
+    return load_config("src/scenarios/quality/config.yaml")
 
 
 def test_loop_logs_round_verdict_and_approval(caplog):

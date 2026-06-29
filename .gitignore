@@ -17,5 +17,8 @@ venv/
 # Azure Functions local settings (holds the local ANTHROPIC_API_KEY — never commit)
 local.settings.json
 
+# Function-call script secrets (holds the deployed FUNCTION_KEY — never commit)
+scripts/.env
+
 # Workflow scratch (SDD ledger, briefs, diffs) — not part of the project
 .superpowers/

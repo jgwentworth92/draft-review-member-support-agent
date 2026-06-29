@@ -1,5 +1,5 @@
-from src.agents import build_drafter, build_reviewer, format_drafter_human
-from src.schemas import ReviewVerdict, FailedRule
+from src.scenarios.quality.agents import build_drafter, build_reviewer, format_drafter_human
+from src.scenarios.quality.schemas import ReviewVerdict, FailedRule
 from tests.stub_model import ScriptedModel
 
 def test_drafter_returns_body_and_uses_inputs():

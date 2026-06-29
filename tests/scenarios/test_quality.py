@@ -1,15 +1,15 @@
 import pytest
 from pydantic import ValidationError
 
-from src.config import load_config
-from src.schemas import ReviewVerdict, RunResult
-from src.service import DraftReviewService
+from src.scenarios.quality.config import load_config
+from src.scenarios.quality.schemas import ReviewVerdict, RunResult
+from src.scenarios.quality.service import DraftReviewService
 from tests.stub_model import ScriptedModel
 
 
 def _svc(drafter, reviewer):
     return DraftReviewService(
-        load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer
+        load_config("src/scenarios/quality/config.yaml"), drafter_model=drafter, reviewer_model=reviewer
     )
 
 

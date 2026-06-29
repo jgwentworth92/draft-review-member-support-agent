@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import logging
 
-from langgraph.graph import END, START, StateGraph
-
 from src.core import guards
 from src.core.runtime import retry_policy as _retry_policy
-from src.agents import build_drafter, build_reviewer
-from src.config import AppConfig
-from src.schemas import GraphState
+from src.core.topologies import critique_loop
+from src.scenarios.quality.agents import build_drafter, build_reviewer
+from src.scenarios.quality.config import AppConfig
+from src.scenarios.quality.schemas import GraphState
 
-logger = logging.getLogger(__name__)
+# Frozen behavior: tests/test_logging.py captures the pre-refactor "src.graph"
+# logger by name (caplog.at_level(..., logger="src.graph")). Logging under that
+# same name preserves the original observability contract unchanged.
+logger = logging.getLogger("src.graph")
 
 
 def initial_state(member_message: str, case_notes: str) -> dict:
@@ -32,7 +34,6 @@ def build_app(
     drafter = build_drafter(drafter_model, config.drafter.system_prompt, drafter_fallback)
     reviewer = build_reviewer(reviewer_model, config.reviewer.system_prompt, reviewer_fallback)
     max_rounds = config.loop.max_rounds
-    retry_policy = _retry_policy(config.loop.retry)
     inj_patterns = config.guards.injection_patterns
     cred_patterns = config.guards.credential_patterns
 
@@ -52,10 +53,7 @@ def build_app(
             }
         return {}
 
-    def route_after_guard(state: GraphState) -> str:
-        return "escalate" if state.get("status") == "escalated" else "drafter"
-
-    def drafter_node(state: GraphState) -> dict:
+    def generator_node(state: GraphState) -> dict:
         draft = drafter(state["member_message"], state["case_notes"], state.get("feedback"))
         return {"draft": draft}
 
@@ -101,35 +99,23 @@ def build_app(
             return "escalate"
         return "revise"
 
-    def increment_node(state: GraphState) -> dict:
-        return {"round": state["round"] + 1}
-
-    def approve_node(state: GraphState) -> dict:
+    def on_approve(state: GraphState) -> None:
         logger.info("Approved -> pending_human_review after %d round(s)", state["round"])
-        return {"status": "pending_human_review"}
 
-    def escalate_node(state: GraphState) -> dict:
+    def on_escalate(state: GraphState) -> None:
         logger.info(
             "Escalated -> human intervention after %d round(s)", len(state.get("history", []))
         )
-        return {"status": "escalated"}
 
-    g = StateGraph(GraphState)
-    g.add_node("guard_input", guard_input_node)
-    # The model-calling nodes get LangGraph's built-in node-level retry (when configured).
-    g.add_node("drafter", drafter_node, retry_policy=retry_policy)
-    g.add_node("reviewer", reviewer_node, retry_policy=retry_policy)
-    g.add_node("increment", increment_node)
-    g.add_node("approve", approve_node)
-    g.add_node("escalate", escalate_node)
-
-    g.add_edge(START, "guard_input")
-    g.add_conditional_edges("guard_input", route_after_guard,
-                            {"escalate": "escalate", "drafter": "drafter"})
-    g.add_edge("drafter", "reviewer")
-    g.add_conditional_edges("reviewer", route_after_review,
-                            {"approve": "approve", "escalate": "escalate", "revise": "increment"})
-    g.add_edge("increment", "drafter")
-    g.add_edge("approve", END)
-    g.add_edge("escalate", END)
-    return g.compile()
+    return critique_loop(
+        GraphState,
+        generator=generator_node,
+        reviewer=reviewer_node,
+        route_after_review=route_after_review,
+        input_guard=guard_input_node,
+        approved_status="pending_human_review",
+        escalated_status="escalated",
+        retry_policy=_retry_policy(config.loop.retry),
+        on_approve=on_approve,
+        on_escalate=on_escalate,
+    )

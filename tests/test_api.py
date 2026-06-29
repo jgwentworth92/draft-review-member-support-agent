@@ -11,16 +11,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api import app, get_service
-from src.config import load_config
-from src.schemas import FailedRule, ReviewVerdict
-from src.service import DraftReviewService
+from src.scenarios.quality.config import load_config
+from src.scenarios.quality.schemas import FailedRule, ReviewVerdict
+from src.scenarios.quality.service import DraftReviewService
 from tests.stub_model import ScriptedModel
 
 client = TestClient(app)
 
 
 def _override_service(drafter, reviewer):
-    svc = DraftReviewService(load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer)
+    svc = DraftReviewService(load_config("src/scenarios/quality/config.yaml"), drafter_model=drafter, reviewer_model=reviewer)
 
     def _get():
         return svc

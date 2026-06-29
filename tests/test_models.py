@@ -1,5 +1,5 @@
 from unittest.mock import patch
-from src.config import AgentConfig
+from src.core.config import AgentConfig
 from src.core.models import build_model
 
 def test_build_model_passes_config_to_init_chat_model():

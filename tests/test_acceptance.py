@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from src.service import DraftReviewService
+from src.scenarios.quality.service import DraftReviewService
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),

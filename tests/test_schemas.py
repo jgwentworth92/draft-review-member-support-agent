@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from src.schemas import FailedRule, ReviewVerdict, RunInput
+from src.scenarios.quality.schemas import FailedRule, ReviewVerdict, RunInput
 
 def test_review_verdict_defaults_empty_failed_rules():
     v = ReviewVerdict(verdict="pass")

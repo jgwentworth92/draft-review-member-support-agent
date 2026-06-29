@@ -1,8 +1,8 @@
 from pathlib import Path
-from src.config import load_config
+from src.scenarios.quality.config import load_config
 
 def test_load_config_reads_agents_and_loop():
-    cfg = load_config("config.yaml")
+    cfg = load_config("src/scenarios/quality/config.yaml")
     assert cfg.drafter.provider == "anthropic"
     assert cfg.drafter.model == "claude-haiku-4-5-20251001"
     assert cfg.reviewer.model == "claude-haiku-4-5-20251001"

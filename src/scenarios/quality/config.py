@@ -5,10 +5,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from src.core.config import AgentConfig, GuardConfig, LoopConfig, ModelConfig, RetryConfig  # re-export
-
-# AppConfig (drafter/reviewer/loop/guards) and load_config stay here for now;
-# they relocate to scenarios/quality in Task 7.
+from src.core.config import AgentConfig, GuardConfig, LoopConfig
 
 
 class AppConfig(BaseModel):
