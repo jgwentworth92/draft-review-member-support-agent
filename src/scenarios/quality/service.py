@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.core.models import build_model
 from src.core.service import PipelineService
 from src.scenarios.quality.config import AppConfig, load_config
@@ -30,9 +32,8 @@ class QualityService(PipelineService):
         super().__init__(graph)
 
     @classmethod
-    def from_config_path(
-        cls, path: str = "src/scenarios/quality/config.yaml"
-    ) -> "QualityService":
+    def from_config_path(cls, path: str | None = None) -> "QualityService":
+        path = path or str(Path(__file__).with_name("config.yaml"))
         return cls(load_config(path))
 
     def run(self, member_message: str, case_notes: str) -> RunResult:

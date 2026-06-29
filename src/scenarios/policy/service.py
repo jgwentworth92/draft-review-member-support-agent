@@ -21,7 +21,8 @@ class PolicyService(PipelineService):
         super().__init__(build_app(config, retriever_model, responder_model))
 
     @classmethod
-    def from_config_path(cls, path: str = "src/scenarios/policy/config.yaml"):
+    def from_config_path(cls, path: str | None = None):
+        path = path or str(Path(__file__).with_name("config.yaml"))
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         return cls(PolicyConfig(**data))
 
