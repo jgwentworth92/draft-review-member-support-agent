@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
-from src.config import ModelConfig
+from src.core.config import ModelConfig
 
 
 def build_model(cfg: ModelConfig) -> BaseChatModel:

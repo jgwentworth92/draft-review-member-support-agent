@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 import os
 from langgraph.types import RetryPolicy
-from src.config import RetryConfig
+from src.core.config import RetryConfig
 
 _DEFAULT_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
