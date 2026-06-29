@@ -1,6 +1,6 @@
 retriever:
   provider: anthropic
-  model: claude-3-5-haiku-20241022
+  model: claude-haiku-4-5-20251001
   temperature: 0.0
   system_prompt: >
     You are a policy retrieval specialist. Given a question and an employee
@@ -11,7 +11,7 @@ retriever:
 
 responder:
   provider: anthropic
-  model: claude-3-5-haiku-20241022
+  model: claude-haiku-4-5-20251001
   temperature: 0.0
   system_prompt: >
     You are a policy Q&A assistant. Answer the user's question using ONLY the
