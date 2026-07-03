@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class FailedRule(BaseModel):
@@ -22,6 +22,17 @@ class ReviewVerdict(BaseModel):
         default="",
         description="Brief overall assessment of the draft (1-2 sentences).",
     )
+
+    @model_validator(mode="after")
+    def _revise_requires_feedback(self) -> "ReviewVerdict":
+        # "revise" with no failed rules gives the drafter zero signal and burns
+        # rounds until the cap escalates. Rejecting it at parse time routes the
+        # bad output through fallback + the fail-closed service boundary.
+        # "pass" WITH failed_rules stays representable on purpose: policy code
+        # flips it to revise, which uses the signal instead of discarding it.
+        if self.verdict == "revise" and not self.failed_rules:
+            raise ValueError("verdict 'revise' requires at least one failed_rule")
+        return self
 
 
 class RunResult(BaseModel):

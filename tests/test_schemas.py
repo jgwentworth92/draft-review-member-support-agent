@@ -20,6 +20,18 @@ def test_review_verdict_rejects_unknown_verdict():
     with pytest.raises(ValidationError):
         ReviewVerdict(verdict="maybe")
 
+def test_review_verdict_rejects_revise_without_failed_rules():
+    # revise with no failed rules gives the drafter zero signal; now a parse error.
+    with pytest.raises(ValidationError):
+        ReviewVerdict(verdict="revise")
+
+def test_review_verdict_allows_pass_with_failed_rules():
+    # Deliberately representable: policy code flips it to revise, USING the
+    # signal instead of discarding it at parse time.
+    v = ReviewVerdict(verdict="pass",
+                      failed_rules=[FailedRule(rule="tone", reason="curt")])
+    assert v.verdict == "pass"
+
 def test_run_input_rejects_empty():
     with pytest.raises(ValidationError):
         RunInput(member_message="", case_notes="x")

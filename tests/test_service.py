@@ -96,6 +96,23 @@ def test_input_validation_error_still_propagates():
         svc.run("", "notes")
 
 
+def test_reviewer_validation_error_escalates():
+    # The ReviewVerdict validator turns revise-with-no-signal into a parse
+    # error inside the chain; end to end that must land as escalated, not 503.
+    class _InvalidVerdictReviewer:
+        def with_structured_output(self, _schema):
+            class _Runner:
+                def invoke(self, _messages):
+                    return ReviewVerdict(verdict="revise")  # raises ValidationError
+
+            return _Runner()
+
+    svc = _svc(ScriptedModel(draft_responses=["a draft"]), _InvalidVerdictReviewer())
+    result = svc.run("msg", "notes")
+    assert result.status == "escalated"
+    assert result.review.failed_rules[0].rule == "model_failure"
+
+
 # --- recursion limit covers the widest allowed max_rounds -------------------
 
 
