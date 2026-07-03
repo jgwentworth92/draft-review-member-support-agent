@@ -1,15 +1,15 @@
 import pytest
 from pydantic import ValidationError
 
-from src.config import load_config
 from src.schemas import FailedRule, ReviewVerdict, RunResult
 from src.service import DraftReviewService
+from tests.conftest import make_test_config
 from tests.stub_model import ScriptedModel
 
 
 def _svc(drafter, reviewer):
     return DraftReviewService(
-        load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer
+        make_test_config(), drafter_model=drafter, reviewer_model=reviewer
     )
 
 
@@ -128,8 +128,7 @@ def test_run_deadline_escalates():
             time.sleep(0.5)
             return AIMessage(content="slow draft")
 
-    cfg = load_config("config.yaml")
-    cfg.loop.run_timeout_seconds = 0.05
+    cfg = make_test_config(run_timeout_seconds=0.05)
     svc = DraftReviewService(
         cfg, drafter_model=_SlowDrafter(), reviewer_model=ScriptedModel()
     )
@@ -142,8 +141,7 @@ def test_max_rounds_eight_escalates_without_recursion_error():
     # max_rounds=8 needs 26 supersteps — over LangGraph's default limit of 25.
     # The service passes an explicit recursion_limit, so the cap must escalate
     # cleanly at the widest allowed setting.
-    cfg = load_config("config.yaml")
-    cfg.loop.max_rounds = 8
+    cfg = make_test_config(max_rounds=8)
     revise = ReviewVerdict(
         verdict="revise", failed_rules=[FailedRule(rule="tone", reason="curt")]
     )
@@ -155,3 +153,35 @@ def test_max_rounds_eight_escalates_without_recursion_error():
     result = svc.run("msg", "notes")
     assert result.status == "escalated"
     assert result.rounds == 8
+
+
+# --- fallback injection (no real client construction in tests) ---------------
+
+
+def test_injected_fallback_used_when_primary_fails(monkeypatch):
+    import src.service as service_mod
+    from src.config import ModelConfig
+
+    cfg = make_test_config()
+    cfg.drafter.fallback = ModelConfig(provider="anthropic", model="fb", timeout=1)
+
+    def _must_not_build(_cfg):
+        raise AssertionError("build_model must not be called when models are injected")
+
+    monkeypatch.setattr(service_mod, "build_model", _must_not_build)
+
+    class _BoomDrafter:
+        def invoke(self, _messages):
+            raise RuntimeError("primary down")
+
+    svc = DraftReviewService(
+        cfg,
+        drafter_model=_BoomDrafter(),
+        reviewer_model=ScriptedModel(review_responses=[ReviewVerdict(verdict="pass")]),
+        drafter_fallback=ScriptedModel(
+            draft_responses=["fallback draft. last 4 digits."]
+        ),
+    )
+    result = svc.run("m", "n")
+    assert result.status == "pending_human_review"
+    assert result.draft == "fallback draft. last 4 digits."

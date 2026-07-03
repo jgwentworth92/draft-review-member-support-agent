@@ -11,14 +11,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from src.config import load_config
 from src.schemas import FailedRule, ReviewVerdict
 from src.service import DraftReviewService
+from tests.conftest import make_test_config
 from tests.stub_model import ScriptedModel
 
 
 def _run(member_message, case_notes, drafter, reviewer):
-    svc = DraftReviewService(load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer)
+    svc = DraftReviewService(make_test_config(), drafter_model=drafter, reviewer_model=reviewer)
     return svc.run(member_message, case_notes)
 
 
@@ -54,8 +54,8 @@ def test_revise_then_pass_loops_once():
     )
     assert result.status == "pending_human_review"
     assert result.rounds == 2
-    assert result.history[0]["verdict"] == "revise"
-    assert result.history[1]["verdict"] == "pass"
+    assert result.history[0].verdict == "revise"
+    assert result.history[1].verdict == "pass"
 
 
 def test_three_revises_escalate_not_approve():
@@ -84,7 +84,7 @@ def test_full_card_number_request_is_blocked_even_if_model_passes():
     )
     assert result.status == "escalated"
     assert any(
-        fr["rule"] == "credential_request" for fr in result.history[0]["failed_rules"]
+        fr.rule == "credential_request" for fr in result.history[0].failed_rules
     )
 
 
@@ -97,7 +97,7 @@ def test_bare_account_number_request_is_blocked():
     )
     assert result.status == "escalated"
     assert any(
-        fr["rule"] == "credential_request" for fr in result.history[0]["failed_rules"]
+        fr.rule == "credential_request" for fr in result.history[0].failed_rules
     )
 
 
@@ -110,7 +110,7 @@ def test_last4_request_is_allowed_through():
     )
     assert result.status == "pending_human_review"
     assert all(
-        fr["rule"] != "credential_request" for fr in result.history[0]["failed_rules"]
+        fr.rule != "credential_request" for fr in result.history[0].failed_rules
     )
 
 

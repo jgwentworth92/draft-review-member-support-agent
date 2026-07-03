@@ -1,10 +1,10 @@
-from src.config import load_config
 from src.schemas import ReviewVerdict, FailedRule
 from src.graph import build_app, initial_state
+from tests.conftest import make_test_config
 from tests.stub_model import ScriptedModel
 
 def _cfg():
-    return load_config("config.yaml")
+    return make_test_config()
 
 def test_pass_on_round_one():
     drafter = ScriptedModel(draft_responses=["Empathetic compliant draft. Last 4 digits please."])
@@ -13,7 +13,7 @@ def test_pass_on_round_one():
     final = app.invoke(initial_state("upset about $50 charge", "Disputes can be filed."))
     assert final["status"] == "pending_human_review"
     assert len(final["history"]) == 1
-    assert final["history"][0]["verdict"] == "pass"
+    assert final["history"][0].verdict == "pass"
 
 def test_escalate_after_three_revises():
     drafter = ScriptedModel(draft_responses=["d1", "d2", "d3"])
@@ -53,8 +53,8 @@ def test_output_guard_overrides_llm_pass():
     app = build_app(_cfg(), drafter, reviewer)
     final = app.invoke(initial_state("msg", "notes"))
     assert final["status"] == "escalated"
-    assert any(fr["rule"] == "credential_request"
-               for fr in final["history"][0]["failed_rules"])
+    assert any(fr.rule == "credential_request"
+               for fr in final["history"][0].failed_rules)
 
 def test_output_guard_catches_entire_card_number_with_distant_last4():
     # Regression for the document-wide "last 4" suppression bypass: this draft
@@ -66,5 +66,5 @@ def test_output_guard_catches_entire_card_number_with_distant_last4():
     app = build_app(_cfg(), drafter, reviewer)
     final = app.invoke(initial_state("msg", "notes"))
     assert final["status"] == "escalated"
-    assert any(fr["rule"] == "credential_request"
-               for fr in final["history"][0]["failed_rules"])
+    assert any(fr.rule == "credential_request"
+               for fr in final["history"][0].failed_rules)

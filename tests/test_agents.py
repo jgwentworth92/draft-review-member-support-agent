@@ -14,7 +14,7 @@ def test_drafter_returns_body_and_uses_inputs():
 def test_drafter_human_includes_feedback_points():
     text = format_drafter_human(
         "msg", "notes",
-        [{"rule": "timeline", "reason": "promised 5 days not in notes"}],
+        [FailedRule(rule="timeline", reason="promised 5 days not in notes")],
     )
     assert "timeline" in text and "promised 5 days not in notes" in text
     assert "msg" in text and "notes" in text

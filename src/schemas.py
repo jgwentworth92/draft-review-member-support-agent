@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal, Optional, TypedDict
+import operator
+from typing import Annotated, Literal, Optional, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -35,14 +36,26 @@ class ReviewVerdict(BaseModel):
         return self
 
 
+class RoundRecord(BaseModel):
+    """One drafter->reviewer round, as recorded in run history."""
+
+    round: int
+    draft: str
+    verdict: Literal["pass", "revise"]
+    failed_rules: list[FailedRule] = Field(default_factory=list)
+    notes: str = ""
+
+
 class RunResult(BaseModel):
     """Typed result of one draft-and-review run."""
 
-    status: str
+    # Literal turns "every run ends in one of two states" into an enforced
+    # contract: a third status is a ValidationError, not a silent new value.
+    status: Literal["pending_human_review", "escalated"]
     draft: Optional[str] = None
     rounds: int
     review: ReviewVerdict
-    history: list[dict] = Field(default_factory=list)
+    history: list[RoundRecord] = Field(default_factory=list)
 
     @classmethod
     def from_state(cls, final: dict) -> "RunResult":
@@ -64,21 +77,16 @@ class RunInput(BaseModel):
     case_notes: str = Field(min_length=1)
 
 
-class RoundRecord(TypedDict):
-    round: int
-    draft: str
-    verdict: str
-    failed_rules: list[dict]
-    notes: str
-
-
 class GraphState(TypedDict, total=False):
     member_message: str
     case_notes: str
     draft: str
-    feedback: Optional[list[dict]]
+    feedback: Optional[list[FailedRule]]
     notes: Optional[str]
     round: int
     verdict: Optional[str]
     status: Optional[str]
-    history: list[RoundRecord]
+    # Reducer: nodes return the one new record; LangGraph appends. The other
+    # channels stay last-writer-wins deliberately - the graph is strictly
+    # sequential (see the note in src/graph.py).
+    history: Annotated[list[RoundRecord], operator.add]

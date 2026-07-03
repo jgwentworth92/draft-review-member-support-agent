@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Protocol
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableLambda
 
-from src.schemas import ReviewVerdict
+from src.schemas import FailedRule, ReviewVerdict
+
+
+class DraftModel(Protocol):
+    """Duck-typed surface the drafter needs (real chat models and test stubs)."""
+
+    def invoke(self, messages: Any) -> Any: ...
+
+
+class ReviewModel(Protocol):
+    """Duck-typed surface the reviewer needs."""
+
+    def with_structured_output(self, schema: Any) -> Any: ...
 
 
 class ModelOutputError(RuntimeError):
@@ -25,7 +37,7 @@ _DATA_NOTE = (
 
 
 def format_drafter_human(
-    member_message: str, case_notes: str, feedback: Optional[list[dict]]
+    member_message: str, case_notes: str, feedback: Optional[list[FailedRule]]
 ) -> str:
     parts = [
         _DATA_NOTE,
@@ -33,7 +45,7 @@ def format_drafter_human(
         "\n<case_notes>\n" + case_notes + "\n</case_notes>",
     ]
     if feedback:
-        lines = "\n".join(f"- {f['rule']}: {f['reason']}" for f in feedback)
+        lines = "\n".join(f"- {f.rule}: {f.reason}" for f in feedback)
         parts.append(
             "\nThe previous draft was rejected. You MUST address every point below:\n"
             + lines
@@ -84,8 +96,8 @@ def _require_verdict(verdict: Optional[ReviewVerdict]) -> ReviewVerdict:
 
 
 def build_drafter(
-    model, system_prompt: str, fallback_model=None
-) -> Callable[[str, str, Optional[list[dict]]], str]:
+    model: DraftModel, system_prompt: str, fallback_model: Optional[DraftModel] = None
+) -> Callable[[str, str, Optional[list[FailedRule]]], str]:
     # Pipe from the bound `.invoke` (a callable) rather than the model object:
     # test stubs are duck-typed, not Runnables, and `stub | RunnableLambda(...)`
     # is a TypeError. Normalization sits INSIDE each branch, before
@@ -97,14 +109,16 @@ def build_drafter(
             [RunnableLambda(fallback_model.invoke) | RunnableLambda(_extract_draft_text)]
         )
 
-    def draft(member_message: str, case_notes: str, feedback: Optional[list[dict]] = None) -> str:
+    def draft(
+        member_message: str, case_notes: str, feedback: Optional[list[FailedRule]] = None
+    ) -> str:
         human = format_drafter_human(member_message, case_notes, feedback)
         return chain.invoke([SystemMessage(system_prompt), HumanMessage(human)])
     return draft
 
 
 def build_reviewer(
-    model, system_prompt: str, fallback_model=None
+    model: ReviewModel, system_prompt: str, fallback_model: Optional[ReviewModel] = None
 ) -> Callable[[str, str], ReviewVerdict]:
     # Same bound-method composition as build_drafter; _require_verdict sits
     # after structured output and before with_fallbacks so an absent tool call

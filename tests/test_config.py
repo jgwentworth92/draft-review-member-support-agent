@@ -11,6 +11,8 @@ def test_load_config_reads_agents_and_loop():
     # guard defaults are present even though config.yaml omits the section
     assert cfg.guards.injection_patterns
     assert cfg.guards.credential_patterns
+    # shipped config has no node retry (opt-in only)
+    assert cfg.loop.retry is None
 
 def test_missing_required_field_raises(tmp_path: Path):
     bad = tmp_path / "bad.yaml"

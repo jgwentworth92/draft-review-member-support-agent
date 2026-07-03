@@ -24,15 +24,21 @@ class DraftReviewService:
     inject stub models so they run with no API key.
     """
 
-    def __init__(self, config: AppConfig, drafter_model=None, reviewer_model=None):
+    def __init__(
+        self,
+        config: AppConfig,
+        drafter_model=None,
+        reviewer_model=None,
+        drafter_fallback=None,
+        reviewer_fallback=None,
+    ):
         drafter_model = drafter_model or build_model(config.drafter)
         reviewer_model = reviewer_model or build_model(config.reviewer)
-        drafter_fallback = (
-            build_model(config.drafter.fallback) if config.drafter.fallback else None
-        )
-        reviewer_fallback = (
-            build_model(config.reviewer.fallback) if config.reviewer.fallback else None
-        )
+        # Injected fallbacks (tests) win; otherwise build from config when set.
+        if drafter_fallback is None and config.drafter.fallback:
+            drafter_fallback = build_model(config.drafter.fallback)
+        if reviewer_fallback is None and config.reviewer.fallback:
+            reviewer_fallback = build_model(config.reviewer.fallback)
         self._app = build_app(
             config, drafter_model, reviewer_model, drafter_fallback, reviewer_fallback
         )

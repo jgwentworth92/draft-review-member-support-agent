@@ -16,11 +16,12 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-from src.config import ModelConfig, RetryConfig, load_config
+from src.config import ModelConfig, RetryConfig
 from src.agents import build_drafter, build_reviewer
 from src.graph import build_app, initial_state
 from src.models import build_model
 from src.schemas import ReviewVerdict
+from tests.conftest import make_test_config
 from tests.stub_model import ScriptedModel
 
 
@@ -99,7 +100,7 @@ class _FailOnceReviewer:
 
 
 def test_node_retry_recovers_from_transient_failure():
-    cfg = load_config("config.yaml")
+    cfg = make_test_config()
     # Enable LangGraph node retry with near-zero backoff so the test is fast.
     cfg.loop.retry = RetryConfig(max_attempts=2, initial_interval=0.01, max_interval=0.02)
 
@@ -117,8 +118,10 @@ def test_node_retry_recovers_from_transient_failure():
 
 
 def test_no_retry_policy_by_default():
-    # Default config has no loop.retry; a single transient failure is NOT retried.
-    cfg = load_config("config.yaml")
+    # LoopConfig defaults to no node retry; a single transient failure is NOT
+    # retried. (The shipped config.yaml's no-retry state is asserted in
+    # tests/test_config.py, the production-file gate.)
+    cfg = make_test_config()
     assert cfg.loop.retry is None
 
 
@@ -168,7 +171,7 @@ class _CountingRaisingReviewer:
 def test_permanent_401_not_retried_at_graph_level():
     import pytest
 
-    cfg = load_config("config.yaml")
+    cfg = make_test_config()
     cfg.loop.retry = RetryConfig(max_attempts=3, initial_interval=0.01, max_interval=0.02)
     reviewer = _CountingRaisingReviewer(_FakeAPIStatusError(401))
     app = build_app(
@@ -185,7 +188,7 @@ def test_permanent_401_not_retried_at_graph_level():
 def test_permanent_401_escalates_at_service_level():
     from src.service import DraftReviewService
 
-    cfg = load_config("config.yaml")
+    cfg = make_test_config()
     cfg.loop.retry = RetryConfig(max_attempts=3, initial_interval=0.01, max_interval=0.02)
     reviewer = _CountingRaisingReviewer(_FakeAPIStatusError(401))
     svc = DraftReviewService(
