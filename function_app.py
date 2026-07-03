@@ -14,6 +14,7 @@ across invocations on a warm worker. Cold starts rebuild it.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import azure.functions as func
@@ -31,25 +32,29 @@ logger = logging.getLogger(__name__)
 # endpoint, or front it with API Management / Entra ID for real auth.
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
-_service: DraftReviewService | None = None
+# Built at IMPORT (cold start): a bad config fails host indexing at deploy
+# time, not the first customer request. Model clients construct without an
+# API key and without network; warm invocations reuse the compiled graph.
+_service: DraftReviewService = DraftReviewService.from_config_path()
 
 
 def get_service() -> DraftReviewService:
-    """Lazily build the service once and reuse it. Built on first request so
-    importing the app needs no API key; warm invocations reuse the compiled graph."""
-    global _service
-    if _service is None:
-        _service = DraftReviewService.from_config_path()
     return _service
+
+
+def _json_response(payload: dict, status_code: int) -> func.HttpResponse:
+    # json.dumps, never f-string interpolation: exception text contains quotes
+    # and newlines that would produce a syntactically broken body.
+    return func.HttpResponse(
+        body=json.dumps(payload),
+        mimetype="application/json",
+        status_code=status_code,
+    )
 
 
 @app.route(route="health", methods=["GET"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
-    return func.HttpResponse(
-        body='{"status": "ok"}',
-        mimetype="application/json",
-        status_code=200,
-    )
+    return _json_response({"status": "ok"}, 200)
 
 
 @app.route(route="draft", methods=["POST"])
@@ -58,32 +63,22 @@ def draft(req: func.HttpRequest) -> func.HttpResponse:
     try:
         payload = req.get_json()
     except ValueError:
-        return func.HttpResponse(
-            body='{"detail": "Request body must be valid JSON."}',
-            mimetype="application/json",
-            status_code=400,
-        )
+        return _json_response({"detail": "Request body must be valid JSON."}, 400)
 
     try:
         request = RunInput(**payload)
     except (ValidationError, TypeError) as exc:
-        return func.HttpResponse(
-            body=f'{{"detail": "Invalid input: {exc}"}}',
-            mimetype="application/json",
-            status_code=422,
-        )
+        # Validation detail describes the caller's own input (not internals),
+        # but it must go through json.dumps to stay a valid body.
+        return _json_response({"detail": f"Invalid input: {exc}"}, 422)
 
-    # 2. Run the agent. A failure here is a config/model/runtime problem
-    #    (e.g. missing API key) -> 503, same as the FastAPI layer.
+    # 2. Run the agent. The service fails closed (escalated result); this is a
+    #    last-resort belt. Generic detail only - the real error is in the log.
     try:
         result = get_service().run(request.member_message, request.case_notes)
-    except Exception as exc:
+    except Exception:
         logger.exception("Agent run failed")
-        return func.HttpResponse(
-            body=f'{{"detail": "Agent run failed: {exc}"}}',
-            mimetype="application/json",
-            status_code=503,
-        )
+        return _json_response({"detail": "Agent run failed"}, 503)
 
     # 3. Log the outcome only — not the member message or draft body (may contain PII).
     logger.info("/draft -> status=%s rounds=%d", result.status, result.rounds)

@@ -99,6 +99,28 @@ def test_input_validation_error_still_propagates():
 # --- recursion limit covers the widest allowed max_rounds -------------------
 
 
+def test_run_deadline_escalates():
+    # A run that outlives loop.run_timeout_seconds must fail closed, not hang.
+    # 0.5s sleep vs 0.05s deadline is a 10x margin - not timing-flaky.
+    import time
+
+    from langchain_core.messages import AIMessage
+
+    class _SlowDrafter:
+        def invoke(self, _messages):
+            time.sleep(0.5)
+            return AIMessage(content="slow draft")
+
+    cfg = load_config("config.yaml")
+    cfg.loop.run_timeout_seconds = 0.05
+    svc = DraftReviewService(
+        cfg, drafter_model=_SlowDrafter(), reviewer_model=ScriptedModel()
+    )
+    result = svc.run("msg", "notes")
+    assert result.status == "escalated"
+    assert "deadline" in result.review.failed_rules[0].reason
+
+
 def test_max_rounds_eight_escalates_without_recursion_error():
     # max_rounds=8 needs 26 supersteps — over LangGraph's default limit of 25.
     # The service passes an explicit recursion_limit, so the cap must escalate

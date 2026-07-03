@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 
@@ -11,6 +12,44 @@ from src.config import AppConfig, RetryConfig
 from src.schemas import GraphState
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_on(exc: Exception) -> bool:
+    """Retry only transient failures.
+
+    Provider SDK errors carry `status_code` (duck-typed, provider-agnostic):
+    4xx other than 408/429 is a permanent client/auth error - node retry just
+    multiplies the cost of a bad API key. Otherwise mirror LangGraph's default
+    exclusions: programming errors and RuntimeError (which covers
+    ModelOutputError - absent output is handled by fallback + the service
+    boundary, not by re-asking the same model).
+    """
+    status = getattr(exc, "status_code", None)
+    if status is not None and 400 <= status < 500 and status not in (408, 429):
+        return False
+    if isinstance(exc, ConnectionError):
+        return True
+    if isinstance(
+        exc,
+        (
+            ValueError,
+            TypeError,
+            ArithmeticError,
+            ImportError,
+            LookupError,
+            NameError,
+            SyntaxError,
+            RuntimeError,
+            ReferenceError,
+            StopIteration,
+            StopAsyncIteration,
+            OSError,
+        ),
+    ):
+        return False
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 500 <= exc.response.status_code < 600
+    return True
 
 
 def _retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
@@ -23,6 +62,7 @@ def _retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
         initial_interval=cfg.initial_interval,
         max_interval=cfg.max_interval,
         jitter=cfg.jitter,
+        retry_on=_retry_on,
     )
 
 

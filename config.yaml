@@ -2,6 +2,7 @@ drafter:
   provider: anthropic
   model: claude-haiku-4-5-20251001
   temperature: 0.7
+  timeout: 60          # per-request seconds; without it the SDK default is 600s
   system_prompt: |
     You are a member-support agent for a financial-services company. Write a reply
     email to the member based only on the member message and the case notes provided.
@@ -23,6 +24,7 @@ reviewer:
   provider: anthropic
   model: claude-haiku-4-5-20251001
   temperature: 0.0
+  timeout: 60          # per-request seconds; without it the SDK default is 600s
   system_prompt: |
     You are a compliance reviewer for member-support reply emails at a financial-services
     company. Score the draft against the checklist below using the case notes to judge
@@ -44,6 +46,9 @@ reviewer:
 
 loop:
   max_rounds: 3
+  # Overall wall-clock deadline per run (seconds). On expiry the run fails
+  # closed (escalated); default 120.
+  # run_timeout_seconds: 120
   # Optional node-level retry (LangGraph RetryPolicy) for the drafter/reviewer
   # nodes. Omit for no node retry. (Transient HTTP errors are already retried by
   # the provider SDK via max_retries below.)

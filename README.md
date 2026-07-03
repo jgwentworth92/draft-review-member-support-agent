@@ -108,9 +108,17 @@ code changes don't require a rebuild):
 
 ## Configuration
 
-Edit `config.yaml`. Each agent has `provider`, `model`, `temperature`, and `system_prompt`
-(the reviewer's checklist lives in its prompt). `loop.max_rounds` controls the round limit.
-Optional `guards.injection_patterns` / `guards.credential_patterns` override the defaults.
+Edit `config.yaml`. Each agent has `provider`, `model`, `temperature`, `timeout`, and
+`system_prompt` (the reviewer's checklist lives in its prompt). `loop.max_rounds` controls
+the round limit (1-8); `loop.run_timeout_seconds` caps a whole run. Config is validated
+at startup with unknown keys rejected — a typo'd key or invalid value fails the deploy,
+not the first request.
+
+Guard overrides differ by kind: `guards.injection_patterns` replaces the input-guard
+**regexes** (validated at load). `guards.credential_patterns` only **selects which built-in
+credential checks run** (a list of label names such as `pin`, `full_card_number`) — it can
+disable checks, but adding a new kind of credential detection requires editing
+`src/guards.py`.
 
 ## Resilience (retries, timeout, fallback)
 

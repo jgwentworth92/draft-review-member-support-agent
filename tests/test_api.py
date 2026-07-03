@@ -108,10 +108,52 @@ def test_draft_model_failure_returns_escalated_not_503():
 
 
 def test_draft_rejects_empty_member_message():
+    # FastAPI resolves the get_service dependency even on 422 requests, and the
+    # module-scope client never runs lifespan - so give it a stub (never run).
+    app.dependency_overrides[get_service] = _override_service(ScriptedModel(), ScriptedModel())
     resp = client.post("/draft", json={"member_message": "", "case_notes": "n"})
     assert resp.status_code == 422
 
 
 def test_draft_rejects_missing_field():
+    app.dependency_overrides[get_service] = _override_service(ScriptedModel(), ScriptedModel())
     resp = client.post("/draft", json={"member_message": "only one field"})
     assert resp.status_code == 422
+
+
+# --- lifespan startup (service is built at boot, not first request) ---------
+
+
+def test_lifespan_boots_keyless_and_serves_health():
+    # Startup builds the real service from production config.yaml with no API
+    # key and no network - the README's "boots without a key" claim.
+    with TestClient(app) as booted:
+        resp = booted.get("/health")
+        assert resp.status_code == 200
+        assert app.state.service is not None
+
+
+def test_lifespan_startup_fails_on_bad_config(monkeypatch):
+    # A broken config must kill startup (deploy-visible), not 500 on request one.
+    def _boom(*args, **kwargs):
+        raise RuntimeError("bad config")
+
+    monkeypatch.setattr(DraftReviewService, "from_config_path", _boom)
+    with pytest.raises(RuntimeError, match="bad config"):
+        with TestClient(app):
+            pass
+
+
+# --- error hygiene: 503 detail must not echo exception text ------------------
+
+
+def test_unexpected_service_error_returns_generic_503():
+    class _BrokenService:
+        def run(self, member_message, case_notes):
+            raise RuntimeError("secret internals: /etc/config leaked")
+
+    app.dependency_overrides[get_service] = lambda: _BrokenService()
+    resp = client.post("/draft", json={"member_message": "m", "case_notes": "n"})
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "Agent run failed"
+    assert "secret internals" not in resp.text

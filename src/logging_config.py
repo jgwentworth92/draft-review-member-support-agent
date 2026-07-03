@@ -24,5 +24,14 @@ def configure_logging(level: str | int | None = None) -> None:
     """
     if level is None:
         level = os.getenv("LOG_LEVEL", "INFO")
+    if isinstance(level, str):
+        resolved = logging.getLevelNamesMapping().get(level.upper())
+        if resolved is None:
+            # An env typo must not prevent boot; fall back loudly to INFO.
+            resolved = logging.INFO
+            logging.getLogger(__name__).warning(
+                "Invalid LOG_LEVEL %r; falling back to INFO", level
+            )
+        level = resolved
     logging.basicConfig(level=level, format=_DEFAULT_FORMAT)
     logging.getLogger("src").setLevel(level)
