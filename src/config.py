@@ -49,7 +49,9 @@ class RetryConfig(BaseModel):
 
 
 class LoopConfig(BaseModel):
-    max_rounds: int = 3
+    # le=8 tracks the recursion limit passed by DraftReviewService (3n+4);
+    # unvalidated large values crash mid-loop instead of escalating.
+    max_rounds: int = Field(default=3, ge=1, le=8)
     retry: Optional[RetryConfig] = None
 
 

@@ -41,3 +41,22 @@ def test_scan_output_allows_account_number_with_last4():
 def test_scan_output_flags_full_account_number_phrase():
     # existing behaviour: explicit "full account number" must still flag
     assert "full_account_number" in scan_output("Send your full account number.")
+
+# --- sentence-scoped "last 4" suppression (invariant-audit finding 5.3) ---
+
+def test_scan_output_flags_entire_card_number_despite_distant_last4():
+    # The exact exploit: an unrelated "last 4" mention elsewhere in the draft
+    # must not suppress a full-number request.
+    assert "full_card_number" in scan_output(
+        "Please reply with your entire card number; for reference we already have the last 4 on file."
+    )
+
+def test_scan_output_flags_whole_account_number():
+    assert "full_account_number" in scan_output("Send your whole account number.")
+
+def test_scan_output_flags_bare_card_number_in_other_sentence_than_last4():
+    # Suppression is per-sentence: a "last 4" in a different sentence must not
+    # clear a bare "card number" request.
+    assert "full_card_number" in scan_output(
+        "We have the last 4 on file. Now please confirm your card number."
+    )

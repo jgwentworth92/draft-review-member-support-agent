@@ -55,3 +55,16 @@ def test_output_guard_overrides_llm_pass():
     assert final["status"] == "escalated"
     assert any(fr["rule"] == "credential_request"
                for fr in final["history"][0]["failed_rules"])
+
+def test_output_guard_catches_entire_card_number_with_distant_last4():
+    # Regression for the document-wide "last 4" suppression bypass: this draft
+    # previously slipped the guard entirely; it must now escalate on round 3.
+    draft = ("Please reply with your entire card number; "
+             "for reference we already have the last 4 on file.")
+    drafter = ScriptedModel(draft_responses=[draft] * 3)
+    reviewer = ScriptedModel(review_responses=[ReviewVerdict(verdict="pass")] * 3)
+    app = build_app(_cfg(), drafter, reviewer)
+    final = app.invoke(initial_state("msg", "notes"))
+    assert final["status"] == "escalated"
+    assert any(fr["rule"] == "credential_request"
+               for fr in final["history"][0]["failed_rules"])

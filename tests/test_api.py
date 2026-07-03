@@ -92,6 +92,21 @@ def test_draft_escalates_after_three_revises():
     assert body["rounds"] == 3
 
 
+def test_draft_model_failure_returns_escalated_not_503():
+    # Fail-closed contract: a model failure is a normal 200 response with
+    # status=escalated (a model_failure rule), not a 5xx.
+    app.dependency_overrides[get_service] = _override_service(
+        ScriptedModel(draft_responses=[]),  # immediately exhausted -> raises
+        ScriptedModel(review_responses=[]),
+    )
+    resp = client.post("/draft", json={"member_message": "m", "case_notes": "n"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "escalated"
+    assert body["rounds"] == 0
+    assert any(fr["rule"] == "model_failure" for fr in body["review"]["failed_rules"])
+
+
 def test_draft_rejects_empty_member_message():
     resp = client.post("/draft", json={"member_message": "", "case_notes": "n"})
     assert resp.status_code == 422

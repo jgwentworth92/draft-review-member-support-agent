@@ -6,7 +6,8 @@ checklist and returns `pass` or `revise`. The system loops up to 3 rounds, then 
 distinct outcome — **never auto-send**:
 
 - `pending_human_review` — passed; awaits a human before sending.
-- `escalated` — failed 3 rounds (or a prompt-injection input was detected) → human intervention.
+- `escalated` — failed 3 rounds, a prompt-injection input was detected, or the model
+  pipeline failed (fail-closed) → human intervention.
 
 ## Model-agnostic
 
@@ -59,9 +60,11 @@ Response:
     }
 
 Endpoints: `POST /draft` (run the loop), `GET /health` (liveness). Interactive docs at
-`/docs`. Empty/missing fields return `422`; an agent/model failure returns `503`. A passing
-draft is returned as `pending_human_review` — the caller still puts it in front of a human;
-the API never sends.
+`/docs`. Empty/missing fields return `422`. A model/runtime failure **fails closed**: the
+response is a normal `200` with `status: "escalated"` and a `model_failure` entry in
+`review.failed_rules` — read `status`, not the HTTP code; `5xx` is reserved for broken
+deployments. A passing draft is returned as `pending_human_review` — the caller still puts
+it in front of a human; the API never sends.
 
 ## Run with Docker
 
@@ -77,7 +80,8 @@ Or with Compose (reads your key from `.env`, which is git/docker-ignored):
 
 The API is then at `http://127.0.0.1:8000` (docs at `/docs`). The key is supplied at
 runtime only — it is never copied into the image. Without a key the app still boots and
-`/health` is green; `/draft` returns `503` until a key is provided.
+`/health` is green; `/draft` fails closed (returns `escalated` with a `model_failure`
+rule) until a key is provided.
 
 ## Test
 
@@ -86,6 +90,12 @@ Tests need the dev dependencies (runtime deps plus pytest + httpx):
     python -m pip install -r requirements-dev.txt
     python -m pytest -v --ignore=tests/test_acceptance.py   # deterministic suite (no API key)
     ANTHROPIC_API_KEY=... python -m pytest tests/test_acceptance.py -v   # live acceptance test
+
+Or run the suite in a container (no local Python needed; the repo is bind-mounted, so
+code changes don't require a rebuild):
+
+    docker build -f Dockerfile.test -t draft-review-agent-test .
+    docker run --rm -v "$(pwd):/app" draft-review-agent-test
 
 ## Safeguards
 
@@ -117,5 +127,6 @@ Built on the framework's own mechanisms — no custom retry code — all config-
   and reviewer nodes (`max_attempts`, `backoff_factor`, `initial_interval`, `max_interval`,
   `jitter`). Off unless configured.
 
-On exhaustion, the error surfaces cleanly: the API returns `503`; the service raises an exception.
+On exhaustion the run fails closed: the service returns an `escalated` `RunResult` with a
+`model_failure` feedback entry, which the API relays as a normal `200` response.
 See `config.yaml` for commented examples.

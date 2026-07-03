@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+# Test-runner image: dependencies only. The repo is bind-mounted at /app at run
+# time, so code/test changes never require a rebuild — only dependency bumps do.
+#
+#   docker build -f Dockerfile.test -t draft-review-agent-test .
+#   docker run --rm -v "<repo>:/app" draft-review-agent-test
+#
+# Uses Dockerfile.test.dockerignore (only the requirements files enter the
+# build context); the main .dockerignore intentionally excludes dev deps.
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install -r requirements-dev.txt
+
+CMD ["pytest", "-q"]

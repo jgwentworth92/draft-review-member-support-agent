@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.config import load_config
-from src.schemas import ReviewVerdict, RunResult
+from src.schemas import FailedRule, ReviewVerdict, RunResult
 from src.service import DraftReviewService
 from tests.stub_model import ScriptedModel
 
@@ -11,6 +11,17 @@ def _svc(drafter, reviewer):
     return DraftReviewService(
         load_config("config.yaml"), drafter_model=drafter, reviewer_model=reviewer
     )
+
+
+class _AlwaysRaisingReviewer:
+    """Reviewer model whose structured runner raises on every call."""
+
+    def with_structured_output(self, _schema):
+        class _Runner:
+            def invoke(self, _messages):
+                raise RuntimeError("provider exploded")
+
+        return _Runner()
 
 
 def test_run_returns_typed_runresult_on_pass():
@@ -46,3 +57,62 @@ def test_build_once_reuses_models_across_runs():
     r2 = svc.run("m2", "n2")
     assert r1.status == "pending_human_review"
     assert r2.status == "pending_human_review"
+
+
+# --- fail-closed boundary: every run ends in one of the two states ----------
+
+
+def test_model_exception_escalates_instead_of_raising():
+    # Invariant 1: an exception path must land in `escalated`, never propagate.
+    svc = _svc(
+        ScriptedModel(draft_responses=["a draft. last 4 digits."]),
+        _AlwaysRaisingReviewer(),
+    )
+    result = svc.run("msg", "notes")
+    assert result.status == "escalated"
+    assert result.review.failed_rules[0].rule == "model_failure"
+    assert result.draft is None
+
+
+def test_reviewer_none_on_final_round_escalates():
+    # A degraded reviewer on round max_rounds (3) must yield `escalated`,
+    # never an exception or a third status.
+    revise = ReviewVerdict(
+        verdict="revise", failed_rules=[FailedRule(rule="tone", reason="curt")]
+    )
+    svc = _svc(
+        ScriptedModel(draft_responses=["d1", "d2", "d3"]),
+        ScriptedModel(review_responses=[revise, revise, None]),
+    )
+    result = svc.run("msg", "notes")
+    assert result.status == "escalated"
+    assert any(fr.rule == "model_failure" for fr in result.review.failed_rules)
+
+
+def test_input_validation_error_still_propagates():
+    # Caller-input errors are NOT model failures; they stay outside the boundary.
+    svc = _svc(ScriptedModel(), ScriptedModel())
+    with pytest.raises(ValidationError):
+        svc.run("", "notes")
+
+
+# --- recursion limit covers the widest allowed max_rounds -------------------
+
+
+def test_max_rounds_eight_escalates_without_recursion_error():
+    # max_rounds=8 needs 26 supersteps — over LangGraph's default limit of 25.
+    # The service passes an explicit recursion_limit, so the cap must escalate
+    # cleanly at the widest allowed setting.
+    cfg = load_config("config.yaml")
+    cfg.loop.max_rounds = 8
+    revise = ReviewVerdict(
+        verdict="revise", failed_rules=[FailedRule(rule="tone", reason="curt")]
+    )
+    svc = DraftReviewService(
+        cfg,
+        drafter_model=ScriptedModel(draft_responses=[f"d{i}" for i in range(1, 9)]),
+        reviewer_model=ScriptedModel(review_responses=[revise] * 8),
+    )
+    result = svc.run("msg", "notes")
+    assert result.status == "escalated"
+    assert result.rounds == 8

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 DEFAULT_INJECTION_PATTERNS: list[str] = [
     r"ignore (all |any )?(previous|prior|above) instructions",
     r"disregard (the |all )?(previous|prior|above)",
@@ -22,8 +24,6 @@ DEFAULT_CREDENTIAL_PATTERNS: list[str] = [
     "full_account_number",
     "long_digit_sequence",
 ]
-
-import re
 
 _CREDENTIAL_RULES = [
     ("pin", r"\bpin\b"),
@@ -53,16 +53,20 @@ def scan_output(text: str, patterns: list[str] | None = None) -> list[str]:
         if label in allowed and re.search(pat, lowered):
             findings.append(label)
 
-    if "full_card_number" in allowed:
-        if re.search(r"full card number", lowered):
-            findings.append("full_card_number")
-        elif re.search(r"card number", lowered) and not re.search(r"last (4|four)", lowered):
-            findings.append("full_card_number")
-
-    if "full_account_number" in allowed:
-        if re.search(r"full account number", lowered):
-            findings.append("full_account_number")
-        elif re.search(r"account number", lowered) and not re.search(r"last (4|four)", lowered):
-            findings.append("full_account_number")
+    # Card/account number rules. The strong match (an explicit full-number
+    # qualifier) is never suppressed; the bare-phrase rule is suppressed only
+    # by a "last 4" qualifier in the SAME sentence — a document-wide check let
+    # "reply with your entire card number; we have the last 4 on file" through.
+    sentences = re.split(r"[.!?\n]", lowered)
+    for label, noun in (("full_card_number", "card"), ("full_account_number", "account")):
+        if label not in allowed:
+            continue
+        if re.search(rf"\b(full|complete|entire|whole)\s+{noun}\s+number", lowered):
+            findings.append(label)
+        elif any(
+            re.search(rf"{noun} number", s) and not re.search(r"last (4|four)", s)
+            for s in sentences
+        ):
+            findings.append(label)
 
     return sorted(set(findings))
