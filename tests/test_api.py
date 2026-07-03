@@ -124,9 +124,11 @@ def test_draft_rejects_missing_field():
 # --- lifespan startup (service is built at boot, not first request) ---------
 
 
-def test_lifespan_boots_keyless_and_serves_health():
+def test_lifespan_boots_keyless_and_serves_health(monkeypatch):
     # Startup builds the real service from production config.yaml with no API
-    # key and no network - the README's "boots without a key" claim.
+    # key and no network - the README's "boots without a key" claim. Remove
+    # the key so the property is enforced even on machines that export one.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with TestClient(app) as booted:
         resp = booted.get("/health")
         assert resp.status_code == 200

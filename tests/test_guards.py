@@ -83,6 +83,46 @@ def test_scan_output_flags_request_vocabulary_extensions():
 def test_scan_output_flags_spaced_card_digits():
     assert "long_digit_sequence" in scan_output("Your card 4111 1111 1111 1111 is active.")
 
+# --- review findings: negation contractions, scoped negation, digits, ';' ---
+
+def test_scan_output_allows_negated_contractions():
+    # shouldn't/doesn't/wouldn't + typographic apostrophe (P1 5.4 phrasings).
+    assert scan_output("You shouldn't share your PIN with anyone.") == []
+    assert scan_output("Our bank doesn't ask members to share their PIN.") == []
+    assert scan_output("We wouldn't ask you to confirm your password.") == []
+    assert scan_output("Please don’t share your PIN.") == []  # curly apostrophe
+
+def test_scan_output_allows_negated_ask_with_later_verb():
+    assert scan_output("We will never ask you to provide your PIN.") == []
+
+def test_scan_output_flags_request_after_unrelated_negation():
+    # A planted negation earlier in the sentence must not whitelist a
+    # genuine request (screen-bypass found in review).
+    assert "pin" in scan_output("This is not a scam; please send us your PIN to verify.")
+    assert "password" in scan_output(
+        "We are not able to see it, so please provide your password."
+    )
+
+def test_scan_output_flags_passive_and_unlisted_verb_requests():
+    assert "pin" in scan_output("Your PIN is required to proceed.")
+    assert scan_output("Your PIN is not required.") == []
+    assert "pin" in scan_output("Please respond with the PIN.")
+    assert "password" in scan_output("Submit your password on the portal.")
+    assert "pin" in scan_output("Your PIN, please send it to us.")
+
+def test_scan_output_flags_bare_card_number_across_semicolon():
+    # The original P1 5.3 exploit used a semicolon; ';' is a sentence boundary.
+    assert "full_card_number" in scan_output(
+        "Please reply with your card number; we already have the last 4 on file."
+    )
+
+def test_scan_output_flags_twenty_plus_contiguous_digits():
+    # No upper bound: the old \d{13,} coverage must not silently narrow.
+    assert "long_digit_sequence" in scan_output(
+        "Your number 12345678901234567890 is on file."
+    )
+    assert "long_digit_sequence" in scan_output("Ref 1234 5678 9012 3456 7890 saved.")
+
 # --- injection screen: whitespace and wider alternations --------------------
 
 def test_scan_input_flags_the_previous_instructions():

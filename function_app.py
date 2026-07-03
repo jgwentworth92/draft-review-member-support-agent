@@ -8,8 +8,9 @@ Routes (Azure prepends the configurable `/api` route prefix from host.json):
 - POST /api/draft   — run the Drafter->Reviewer loop on member message + case notes.
 - GET  /api/health  — liveness probe.
 
-The service (models + compiled graph) is built ONCE on first request and reused
-across invocations on a warm worker. Cold starts rebuild it.
+The service (models + compiled graph) is built ONCE at module import (cold
+start), so a bad config fails host indexing at deploy time; warm invocations
+reuse the compiled graph.
 """
 
 from __future__ import annotations

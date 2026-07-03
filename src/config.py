@@ -106,6 +106,20 @@ class GuardConfig(BaseModel):
                 raise ValueError(f"invalid injection pattern {p!r}: {exc}") from exc
         return patterns
 
+    @field_validator("credential_patterns")
+    @classmethod
+    def _labels_known(cls, labels: list[str]) -> list[str]:
+        # These are label names selecting built-in checks, not regexes. A
+        # typo'd label would silently disable its check - the same
+        # silent-disable state min_length=1 exists to prevent.
+        known = set(guards.DEFAULT_CREDENTIAL_PATTERNS)
+        unknown = [label for label in labels if label not in known]
+        if unknown:
+            raise ValueError(
+                f"unknown credential_patterns label(s) {unknown}; known labels: {sorted(known)}"
+            )
+        return labels
+
 
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")

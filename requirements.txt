@@ -6,3 +6,6 @@ PyYAML>=6.0,<7.0
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 azure-functions>=1.21,<2.0
+# Direct dependency: src/graph.py's retry predicate inspects httpx errors.
+# (Also a transitive dep of the anthropic SDK, but we import it ourselves.)
+httpx>=0.27,<1.0

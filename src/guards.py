@@ -31,11 +31,23 @@ DEFAULT_CREDENTIAL_PATTERNS: list[str] = [
 # Request verbs that make a credential noun an actual request. "ask" is
 # deliberately absent: "we will never ask for your PIN" is the compliant
 # warning this request-shaping exists to stop flagging.
-_REQUEST_VERBS = r"\b(share|provide|send|confirm|reply with|enter|give|tell|type|verify|include)\b"
-_NEGATION = re.compile(r"\b(never|not|won'?t|don'?t|cannot|can'?t)\b")
+_REQUEST_VERBS = (
+    r"\b(share|provide|send|confirm|reply\s+with|respond\s+with|submit|enter|"
+    r"give|tell|type|verify|include|key\s+in)\b"
+)
 
-# label -> credential-noun alternation; flagged only when a non-negated
-# request verb precedes the noun within the same sentence.
+# Negation handling, two scoped rules (a whole-sentence negation search would
+# let one planted "not" whitelist a genuine request later in the sentence):
+# - _NEGATION_NEAR: negation within two words of the request verb
+#   ("do not share", "you shouldn't share"). Text is apostrophe-normalized
+#   before matching, so the generic \w+n't covers shouldn't/doesn't/wouldn't.
+# - _NEGATED_ASK: a negated ask/request verb suppresses the rest of the
+#   sentence ("we wouldn't ask you to confirm your password").
+_NEG = r"(?:\b(?:never|not|cannot|won'?t|don'?t|can'?t)\b|\b\w+n't\b)"
+_NEGATION_NEAR = re.compile(rf"{_NEG}\W+(?:\w+\W+){{0,2}}$")
+_NEGATED_ASK = re.compile(rf"{_NEG}\W+(?:\w+\W+){{0,2}}\b(?:ask\w*|request\w*|requir\w*|need\w*)\b")
+
+# label -> credential-noun alternation; flagged only in request context.
 _REQUEST_SHAPED_RULES = [
     ("pin", r"\bpin\b|personal identification number"),
     ("password", r"\bpassword\b|\bpasscode\b"),
@@ -43,20 +55,28 @@ _REQUEST_SHAPED_RULES = [
     ("ssn", r"\bssn\b|social security (number|#)"),
 ]
 
+# Passive requests carry no request verb ("your PIN is required to proceed").
+# The is/are/will-be + required/needed adjacency keeps negated forms
+# ("is not required", "will never be needed") from matching.
+_PASSIVE_REQUEST = r"[^.!?;\n]*\b(?:is|are|will\s+be)\s+(?:required|needed)\b"
+
 # Presence-based, NOT request-shaped: digits (plain, spaced, or dashed) in an
-# outgoing draft are the leak itself, regardless of verb.
-_LONG_DIGIT_SEQUENCE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
+# outgoing draft are the leak itself, regardless of verb. No upper bound -
+# a 20+ digit run must still flag.
+_LONG_DIGIT_SEQUENCE = re.compile(r"\b(?:\d[ -]?){12,}\d\b")
 
 
 def _sentence_requests(sentence: str, noun_pattern: str) -> bool:
-    """True when a request verb precedes the credential noun in this sentence
-    and no negation cue precedes the verb ("never share your PIN" is safe)."""
-    for verb in re.finditer(_REQUEST_VERBS, sentence):
-        if _NEGATION.search(sentence[: verb.start()]):
-            continue
-        if re.search(noun_pattern, sentence[verb.end():]):
+    """True when this sentence requests the credential: a non-negated request
+    verb with the noun present anywhere in the sentence (covers noun-first
+    phrasings like "your PIN, please send it"), or a passive required-form."""
+    if re.search(noun_pattern, sentence):
+        for verb in re.finditer(_REQUEST_VERBS, sentence):
+            prefix = sentence[: verb.start()]
+            if _NEGATION_NEAR.search(prefix) or _NEGATED_ASK.search(prefix):
+                continue
             return True
-    return False
+    return bool(re.search(rf"(?:{noun_pattern}){_PASSIVE_REQUEST}", sentence))
 
 
 def scan_input(text: str, patterns: list[str] | None = None) -> list[str]:
@@ -71,9 +91,12 @@ def scan_output(text: str, patterns: list[str] | None = None) -> list[str]:
     detection logic per label is fixed. Defaults to DEFAULT_CREDENTIAL_PATTERNS.
     """
     allowed = set(patterns if patterns is not None else DEFAULT_CREDENTIAL_PATTERNS)
-    lowered = text.lower()
+    # Normalize typographic apostrophes so contraction-aware rules hold.
+    lowered = text.lower().replace("’", "'")
     findings: list[str] = []
-    sentences = re.split(r"[.!?\n]", lowered)
+    # ';' is a sentence boundary here: the P1 5.3 exploit joined the request
+    # and the suppressing "last 4" clause with a semicolon.
+    sentences = re.split(r"[.!?;\n]", lowered)
 
     for label, noun_pat in _REQUEST_SHAPED_RULES:
         if label in allowed and any(_sentence_requests(s, noun_pat) for s in sentences):

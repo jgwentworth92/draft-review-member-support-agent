@@ -82,6 +82,13 @@ def test_empty_injection_patterns_rejected(tmp_path: Path):
         load_config(_write_config(tmp_path, "guards:\n  injection_patterns: []\n"))
 
 
+def test_unknown_credential_label_rejected(tmp_path: Path):
+    # Labels select built-in checks; a typo would silently disable one.
+    import pytest
+    with pytest.raises(Exception, match="unknown credential_patterns label"):
+        load_config(_write_config(tmp_path, 'guards:\n  credential_patterns: ["pinn"]\n'))
+
+
 def test_empty_yaml_file_rejected(tmp_path: Path):
     import pytest
     empty = tmp_path / "empty.yaml"

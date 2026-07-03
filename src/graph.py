@@ -34,7 +34,9 @@ def _retry_on(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
     if status is not None and 400 <= status < 500 and status not in (408, 429):
         return False
-    if isinstance(exc, ConnectionError):
+    # Connection/timeout-shaped errors are transient; checked before the
+    # OSError exclusion below (both are OSError subclasses).
+    if isinstance(exc, (ConnectionError, TimeoutError)):
         return True
     if isinstance(
         exc,
@@ -55,7 +57,8 @@ def _retry_on(exc: Exception) -> bool:
     ):
         return False
     if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
+        code = exc.response.status_code
+        return code >= 500 or code in (408, 429)
     return True
 
 

@@ -80,11 +80,14 @@ with TestClient(app) as client:
     )
     body = r.json()
     check(
-        "e2e injection -> 200 escalated, draft null, rounds 0",
+        "e2e injection -> 200 escalated via the INPUT GUARD",
         r.status_code == 200
         and body["status"] == "escalated"
         and body["draft"] is None
-        and body["rounds"] == 0,
+        and body["rounds"] == 0
+        # prompt_injection proves the guard fired; a broken guard would reach
+        # the keyless drafter and produce the same shape with model_failure.
+        and body["review"]["failed_rules"][0]["rule"] == "prompt_injection",
         f"status={r.status_code} body.status={body.get('status')} rounds={body.get('rounds')}",
     )
 

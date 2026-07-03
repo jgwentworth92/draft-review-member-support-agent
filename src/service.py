@@ -86,6 +86,11 @@ class DraftReviewService:
             try:
                 return future.result(timeout=self._run_timeout)
             except FuturesTimeoutError:
+                if future.done():
+                    # On 3.11+ FuturesTimeoutError IS builtin TimeoutError, so
+                    # a TimeoutError raised BY the worker lands here too. A
+                    # finished future means pipeline failure, not the deadline.
+                    raise
                 raise RunDeadlineExceeded(
                     f"run exceeded {self._run_timeout}s deadline"
                 ) from None

@@ -185,3 +185,36 @@ def test_injected_fallback_used_when_primary_fails(monkeypatch):
     result = svc.run("m", "n")
     assert result.status == "pending_human_review"
     assert result.draft == "fallback draft. last 4 digits."
+
+
+def test_injected_reviewer_fallback_used_when_primary_fails(monkeypatch):
+    import src.service as service_mod
+    from src.config import ModelConfig
+
+    cfg = make_test_config()
+    cfg.reviewer.fallback = ModelConfig(provider="anthropic", model="fb", timeout=1)
+
+    def _must_not_build(_cfg):
+        raise AssertionError("build_model must not be called when models are injected")
+
+    monkeypatch.setattr(service_mod, "build_model", _must_not_build)
+
+    class _BoomReviewer:
+        def with_structured_output(self, _schema):
+            class _Runner:
+                def invoke(self, _messages):
+                    raise RuntimeError("primary reviewer down")
+
+            return _Runner()
+
+    svc = DraftReviewService(
+        cfg,
+        drafter_model=ScriptedModel(draft_responses=["a draft. last 4 digits."]),
+        reviewer_model=_BoomReviewer(),
+        reviewer_fallback=ScriptedModel(
+            review_responses=[ReviewVerdict(verdict="pass")]
+        ),
+    )
+    result = svc.run("m", "n")
+    assert result.status == "pending_human_review"
+    assert result.review.verdict == "pass"
