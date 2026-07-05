@@ -10,6 +10,9 @@ venv/
 # Test cache
 .pytest_cache/
 
+# Generated test artifacts (DoD JSON report, etc.)
+test-artifacts/
+
 # Secrets / local env
 .env
 .env.*
