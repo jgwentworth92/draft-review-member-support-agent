@@ -1,16 +1,65 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 
+import httpx
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 
 from src import guards
-from src.agents import build_drafter, build_reviewer
+from src.agents import DraftModel, ReviewModel, build_drafter, build_reviewer
 from src.config import AppConfig, RetryConfig
-from src.schemas import GraphState
+from src.policy import apply_review_policy
+from src.schemas import FailedRule, GraphState, RoundRecord
 
 logger = logging.getLogger(__name__)
+
+# Channel-write policy (decided, not accidental): `history` uses an
+# operator.add reducer (append semantics); `status`/`verdict`/`feedback`/
+# `notes` are last-writer-wins, which is safe because this graph is strictly
+# sequential. Any future parallel branch must revisit those channels.
+
+
+def _retry_on(exc: Exception) -> bool:
+    """Retry only transient failures.
+
+    Provider SDK errors carry `status_code` (duck-typed, provider-agnostic):
+    4xx other than 408/429 is a permanent client/auth error - node retry just
+    multiplies the cost of a bad API key. Otherwise mirror LangGraph's default
+    exclusions: programming errors and RuntimeError (which covers
+    ModelOutputError - absent output is handled by fallback + the service
+    boundary, not by re-asking the same model).
+    """
+    status = getattr(exc, "status_code", None)
+    if status is not None and 400 <= status < 500 and status not in (408, 429):
+        return False
+    # Connection/timeout-shaped errors are transient; checked before the
+    # OSError exclusion below (both are OSError subclasses).
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    if isinstance(
+        exc,
+        (
+            ValueError,
+            TypeError,
+            ArithmeticError,
+            ImportError,
+            LookupError,
+            NameError,
+            SyntaxError,
+            RuntimeError,
+            ReferenceError,
+            StopIteration,
+            StopAsyncIteration,
+            OSError,
+        ),
+    ):
+        return False
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        return code >= 500 or code in (408, 429)
+    return True
 
 
 def _retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
@@ -23,10 +72,11 @@ def _retry_policy(cfg: RetryConfig | None) -> RetryPolicy | None:
         initial_interval=cfg.initial_interval,
         max_interval=cfg.max_interval,
         jitter=cfg.jitter,
+        retry_on=_retry_on,
     )
 
 
-def initial_state(member_message: str, case_notes: str) -> dict:
+def initial_state(member_message: str, case_notes: str) -> GraphState:
     return {
         "member_message": member_message,
         "case_notes": case_notes,
@@ -35,12 +85,20 @@ def initial_state(member_message: str, case_notes: str) -> dict:
     }
 
 
+def route_after_review(state: GraphState, *, max_rounds: int) -> str:
+    if state["verdict"] == "pass":
+        return "approve"
+    if state["round"] >= max_rounds:
+        return "escalate"
+    return "revise"
+
+
 def build_app(
     config: AppConfig,
-    drafter_model,
-    reviewer_model,
-    drafter_fallback=None,
-    reviewer_fallback=None,
+    drafter_model: DraftModel,
+    reviewer_model: ReviewModel,
+    drafter_fallback: DraftModel | None = None,
+    reviewer_fallback: ReviewModel | None = None,
 ):
     drafter = build_drafter(drafter_model, config.drafter.system_prompt, drafter_fallback)
     reviewer = build_reviewer(reviewer_model, config.reviewer.system_prompt, reviewer_fallback)
@@ -59,7 +117,10 @@ def build_app(
                 "status": "escalated",
                 "verdict": "revise",
                 "feedback": [
-                    {"rule": "prompt_injection", "reason": f"Injection patterns detected: {hits}"}
+                    FailedRule(
+                        rule="prompt_injection",
+                        reason=f"Injection patterns detected: {hits}",
+                    )
                 ],
                 "notes": "Escalated by the input guard before drafting.",
             }
@@ -74,45 +135,28 @@ def build_app(
 
     def reviewer_node(state: GraphState) -> dict:
         verdict_obj = reviewer(state["draft"], state["case_notes"])
-        failed = [fr.model_dump() for fr in verdict_obj.failed_rules]
-        verdict = "pass" if (verdict_obj.verdict == "pass" and not failed) else "revise"
-        notes = verdict_obj.notes
-
-        cred_hits = guards.scan_output(state["draft"], cred_patterns)
-        if cred_hits:
-            verdict = "revise"
-            failed = failed + [
-                {"rule": "credential_request", "reason": f"Draft requests prohibited info: {cred_hits}"}
-            ]
-            logger.warning("Output guard forced revise; prohibited info requested: %s", cred_hits)
+        verdict, failed = apply_review_policy(verdict_obj, state["draft"], cred_patterns)
 
         logger.info(
             "Round %d review verdict=%s failed_rules=%s",
             state["round"],
             verdict,
-            [fr["rule"] for fr in failed],
+            [fr.rule for fr in failed],
         )
 
-        record = {
-            "round": state["round"],
-            "draft": state["draft"],
-            "verdict": verdict,
-            "failed_rules": failed,
-            "notes": notes,
-        }
+        record = RoundRecord(
+            round=state["round"],
+            draft=state["draft"],
+            verdict=verdict,
+            failed_rules=failed,
+            notes=verdict_obj.notes,
+        )
         return {
             "verdict": verdict,
             "feedback": failed,
-            "notes": notes,
-            "history": state.get("history", []) + [record],
+            "notes": verdict_obj.notes,
+            "history": [record],  # the reducer appends
         }
-
-    def route_after_review(state: GraphState) -> str:
-        if state["verdict"] == "pass":
-            return "approve"
-        if state["round"] >= max_rounds:
-            return "escalate"
-        return "revise"
 
     def increment_node(state: GraphState) -> dict:
         return {"round": state["round"] + 1}
@@ -140,7 +184,7 @@ def build_app(
     g.add_conditional_edges("guard_input", route_after_guard,
                             {"escalate": "escalate", "drafter": "drafter"})
     g.add_edge("drafter", "reviewer")
-    g.add_conditional_edges("reviewer", route_after_review,
+    g.add_conditional_edges("reviewer", partial(route_after_review, max_rounds=max_rounds),
                             {"approve": "approve", "escalate": "escalate", "revise": "increment"})
     g.add_edge("increment", "drafter")
     g.add_edge("approve", END)

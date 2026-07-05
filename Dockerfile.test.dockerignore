@@ -1,0 +1,5 @@
+# Context for Dockerfile.test only: the image copies nothing but the
+# requirements files (the repo is bind-mounted at run time).
+*
+!requirements.txt
+!requirements-dev.txt

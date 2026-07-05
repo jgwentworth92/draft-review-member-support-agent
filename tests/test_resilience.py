@@ -16,11 +16,12 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-from src.config import ModelConfig, RetryConfig, load_config
+from src.config import ModelConfig, RetryConfig
 from src.agents import build_drafter, build_reviewer
 from src.graph import build_app, initial_state
 from src.models import build_model
 from src.schemas import ReviewVerdict
+from tests.conftest import make_test_config
 from tests.stub_model import ScriptedModel
 
 
@@ -99,7 +100,7 @@ class _FailOnceReviewer:
 
 
 def test_node_retry_recovers_from_transient_failure():
-    cfg = load_config("config.yaml")
+    cfg = make_test_config()
     # Enable LangGraph node retry with near-zero backoff so the test is fast.
     cfg.loop.retry = RetryConfig(max_attempts=2, initial_interval=0.01, max_interval=0.02)
 
@@ -117,6 +118,84 @@ def test_node_retry_recovers_from_transient_failure():
 
 
 def test_no_retry_policy_by_default():
-    # Default config has no loop.retry; a single transient failure is NOT retried.
-    cfg = load_config("config.yaml")
+    # LoopConfig defaults to no node retry; a single transient failure is NOT
+    # retried. (The shipped config.yaml's no-retry state is asserted in
+    # tests/test_config.py, the production-file gate.)
+    cfg = make_test_config()
     assert cfg.loop.retry is None
+
+
+# --- retry discipline: permanent 4xx errors are not node-retried ------------
+
+
+class _FakeAPIStatusError(Exception):
+    """Duck-types a provider SDK error carrying an HTTP status code."""
+
+    def __init__(self, status_code: int):
+        super().__init__(f"api error {status_code}")
+        self.status_code = status_code
+
+
+def test_retry_predicate_classifies_errors():
+    from src.agents import ModelOutputError
+    from src.graph import _retry_on
+
+    assert _retry_on(_FakeAPIStatusError(401)) is False  # bad key: permanent
+    assert _retry_on(_FakeAPIStatusError(400)) is False
+    assert _retry_on(_FakeAPIStatusError(429)) is True   # rate limit: transient
+    assert _retry_on(_FakeAPIStatusError(500)) is True
+    assert _retry_on(ConnectionError()) is True
+    assert _retry_on(ModelOutputError("no tool call")) is False  # fallback-only
+    assert _retry_on(ValueError("parse")) is False
+    assert _retry_on(Exception("generic transient")) is True
+
+
+class _CountingRaisingReviewer:
+    """Reviewer whose structured runner always raises the given error."""
+
+    def __init__(self, exc: Exception):
+        self.calls = 0
+        self._exc = exc
+
+    def with_structured_output(self, _schema):
+        outer = self
+
+        class _Runner:
+            def invoke(self, _messages):
+                outer.calls += 1
+                raise outer._exc
+
+        return _Runner()
+
+
+def test_permanent_401_not_retried_at_graph_level():
+    import pytest
+
+    cfg = make_test_config()
+    cfg.loop.retry = RetryConfig(max_attempts=3, initial_interval=0.01, max_interval=0.02)
+    reviewer = _CountingRaisingReviewer(_FakeAPIStatusError(401))
+    app = build_app(
+        cfg,
+        ScriptedModel(draft_responses=["a draft. last 4 digits."]),
+        reviewer,
+    )
+    # The bare graph propagates (the fail-closed boundary lives in the service).
+    with pytest.raises(_FakeAPIStatusError):
+        app.invoke(initial_state("member message", "case notes"))
+    assert reviewer.calls == 1  # not retried
+
+
+def test_permanent_401_escalates_at_service_level():
+    from src.service import DraftReviewService
+
+    cfg = make_test_config()
+    cfg.loop.retry = RetryConfig(max_attempts=3, initial_interval=0.01, max_interval=0.02)
+    reviewer = _CountingRaisingReviewer(_FakeAPIStatusError(401))
+    svc = DraftReviewService(
+        cfg,
+        drafter_model=ScriptedModel(draft_responses=["a draft. last 4 digits."]),
+        reviewer_model=reviewer,
+    )
+    result = svc.run("member message", "case notes")
+    assert result.status == "escalated"
+    assert reviewer.calls == 1

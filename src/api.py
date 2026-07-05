@@ -12,36 +12,47 @@ service built with deterministic stub models (no API key).
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 
 from src.logging_config import configure_logging
 from src.schemas import RunInput, RunResult
 from src.service import DraftReviewService
 
-configure_logging()
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Build the service at STARTUP: a bad config kills the deploy visibly
+    # instead of 500ing the first customer request, and there is no lazy-init
+    # race. Model clients construct without an API key and without network.
+    configure_logging()
+    app.state.service = DraftReviewService.from_config_path()
+    yield
+
 
 app = FastAPI(
     title="Draft-and-Review Member Support Agent",
     version="1.0.0",
     summary="Generate a compliance-reviewed member-support reply (human-in-the-loop).",
+    lifespan=lifespan,
 )
 
-_service: DraftReviewService | None = None
 
-
-def get_service() -> DraftReviewService:
-    """Lazily build the service once and reuse it. Built on first request so
-    importing the app needs no API key; tests override this dependency."""
-    global _service
-    if _service is None:
-        _service = DraftReviewService.from_config_path()
-    return _service
+def get_service(request: Request) -> DraftReviewService:
+    """Return the service built in the lifespan handler. Tests override this
+    dependency to inject stub-model services."""
+    service = getattr(request.app.state, "service", None)
+    if service is None:
+        raise RuntimeError("service not initialized - app was started without its lifespan")
+    return service
 
 
 @app.get("/health")
-def health() -> dict:
+async def health() -> dict:
+    # async so liveness never waits on the threadpool that runs /draft.
     return {"status": "ok"}
 
 
@@ -49,9 +60,11 @@ def health() -> dict:
 def draft(request: RunInput, service: DraftReviewService = Depends(get_service)) -> RunResult:
     try:
         result = service.run(request.member_message, request.case_notes)
-    except Exception as exc:  # config/model/runtime failure (e.g. missing API key)
+    except Exception as exc:  # last-resort belt: the service itself fails closed
+        # Generic detail only - exception text can carry provider bodies,
+        # request IDs, and config internals. The real error is in the log line.
         logger.exception("Agent run failed")
-        raise HTTPException(status_code=503, detail=f"Agent run failed: {exc}") from exc
+        raise HTTPException(status_code=503, detail="Agent run failed") from exc
 
     # Log the outcome only — not the member message or draft body (may contain PII).
     logger.info("/draft -> status=%s rounds=%d", result.status, result.rounds)
