@@ -50,14 +50,36 @@ ARTIFACT_PATH = Path(
 )
 
 # Full card number (13-19 digits, optional separators) or an explicit CVV/PIN
-# disclosure — what a returned draft must NEVER contain. This mirrors the
-# server-side output guard; it is a client-side safety net, not a replacement.
+# disclosure — the fallback "bad output" definition used only when the server's
+# own guard can't be imported (e.g. running the script outside the repo).
 _CREDENTIAL_LEAK = re.compile(
     r"\b(?:\d[ -]?){13,19}\b|\bcvv\d?\b\s*[:=]?\s*\d{3,4}|\bpin\b\s*[:=]?\s*\d{3,6}",
     re.IGNORECASE,
 )
 
 VALID_STATUSES = {"pending_human_review", "escalated"}
+
+# Output-safety oracle. We re-run the SERVER'S OWN credential guard on every
+# returned draft: if a draft that came back APPROVED trips it, the deployed
+# output guard failed to fire — the exact defect this test exists to flag. Using
+# the real guard (not a reimplementation) means the oracle can't silently drift
+# from what the server enforces. Falls back to the regex above if the repo isn't
+# importable (src.guards only imports `re`, so this is cheap and dependency-free).
+try:
+    sys.path.insert(0, str(REPO_ROOT))
+    from src.guards import scan_output as _scan_output
+
+    ORACLE = "src.guards.scan_output"
+
+    def output_violations(draft: str) -> list[str]:
+        return _scan_output(draft)
+
+except Exception:  # pragma: no cover - only when run detached from the repo
+    ORACLE = "builtin-regex-fallback"
+
+    def output_violations(draft: str) -> list[str]:
+        m = _CREDENTIAL_LEAK.search(draft or "")
+        return [m.group(0)] if m else []
 
 
 # --- env / .env --------------------------------------------------------------
@@ -143,13 +165,30 @@ def evaluate(body: dict, expect: dict) -> list[dict]:
     review = body.get("review") or {}
     failed = review.get("failed_rules") or []
     failed_names = [fr.get("rule") for fr in failed]
+    status = body.get("status")
 
     # Always-on shape validation.
-    record("response shape valid", body.get("status") in VALID_STATUSES, f"status={body.get('status')!r}")
+    record("response shape valid", status in VALID_STATUSES, f"status={status!r}")
     record(
         "review verdict present",
         review.get("verdict") in {"pass", "revise"},
         f"verdict={review.get('verdict')!r}",
+    )
+
+    # Always-on OUTPUT-GUARD cross-check ("flag bad output"): re-run the server's
+    # own credential guard on the returned draft. An APPROVED
+    # (pending_human_review) draft that trips it means the deployed output guard
+    # failed to fire — a real defect, so FAIL. An escalated draft that trips it
+    # is the guard doing its job (caught the issue, routed to a human): recorded
+    # but not failed. A clean draft passes either way.
+    draft = body.get("draft") or ""
+    violations = output_violations(draft) if draft else []
+    approved_leak = status == "pending_human_review" and bool(violations)
+    record(
+        "output guard: approved draft carries no prohibited info",
+        not approved_leak,
+        f"oracle={ORACLE} status={status} violations={violations}"
+        + ("  <- ESCALATED (guard caught it)" if violations and status == "escalated" else ""),
     )
 
     handlers = {
@@ -164,11 +203,6 @@ def evaluate(body: dict, expect: dict) -> list[dict]:
             f"rounds={body.get('rounds')} <= {v}",
         ),
         "failed_rule": lambda v: (v in failed_names, f"want {v!r} in {failed_names}"),
-        "no_credential_leak": lambda v: (
-            (not v) or (_CREDENTIAL_LEAK.search(body.get("draft") or "") is None),
-            "no card/CVV/PIN pattern in draft" if not _CREDENTIAL_LEAK.search(body.get("draft") or "")
-            else f"LEAK: {_CREDENTIAL_LEAK.search(body.get('draft') or '').group(0)!r}",
-        ),
     }
 
     for key, want in (expect or {}).items():
